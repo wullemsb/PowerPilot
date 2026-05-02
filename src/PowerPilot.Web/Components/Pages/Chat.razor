@@ -1,0 +1,121 @@
+@page "/chat"
+@rendermode InteractiveServer
+@using PowerPilot.Agents
+@inject ChatAgentService AgentService
+@implements IDisposable
+
+<PageTitle>PowerPilot Chat</PageTitle>
+
+<div class="chat-container">
+    <div class="chat-header">
+        <a href="/" class="back-link">← Dashboard</a>
+        <h2>PowerPilot Assistant</h2>
+        <button class="btn-clear" @onclick="ClearChat">Clear</button>
+    </div>
+
+    <div class="chat-messages" @ref="messagesDiv">
+        @if (!messages.Any())
+        {
+            <div class="chat-welcome">
+                <p>Hi! I'm PowerPilot, your energy management assistant.</p>
+                <p>Ask me anything about your energy consumption and production:</p>
+                <div class="suggestion-chips">
+                    <button class="chip" @onclick='() => AskSuggestion("Am I currently producing more power than I am consuming?")'>Am I producing more than consuming?</button>
+                    <button class="chip" @onclick='() => AskSuggestion("When is a good time to start the dishwasher?")'>When to start the dishwasher?</button>
+                    <button class="chip" @onclick='() => AskSuggestion("How much energy have I used today?")'>Today&apos;s energy usage</button>
+                    <button class="chip" @onclick='() => AskSuggestion("What is my energy balance this week?")'>This week&apos;s balance</button>
+                </div>
+            </div>
+        }
+
+        @foreach (var msg in messages)
+        {
+            <div class="message @(msg.IsUser ? "user-message" : "assistant-message")">
+                <div class="message-bubble">
+                    @if (!msg.IsUser) { <span class="message-icon">⚡</span> }
+                    <span class="message-text">@((MarkupString)FormatMessage(msg.Content))</span>
+                </div>
+                <div class="message-time">@msg.Timestamp.ToLocalTime().ToString("HH:mm")</div>
+            </div>
+        }
+
+        @if (isTyping)
+        {
+            <div class="message assistant-message">
+                <div class="message-bubble">
+                    <span class="message-icon">⚡</span>
+                    <span class="message-text">...</span>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="chat-input">
+        <textarea @bind="userInput" @onkeydown="OnKeyDown" 
+                  placeholder="Ask about your energy consumption..."
+                  disabled="@isTyping" rows="2"></textarea>
+        <button class="btn-send" @onclick="SendMessage" disabled="@(isTyping || string.IsNullOrWhiteSpace(userInput))">
+            Send
+        </button>
+    </div>
+</div>
+
+@code {
+    private record ChatMessage(string Content, bool IsUser, DateTime Timestamp);
+    private List<ChatMessage> messages = new();
+    private string userInput = string.Empty;
+    private bool isTyping;
+    private ElementReference messagesDiv;
+    private CancellationTokenSource? _cts;
+
+    private async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(userInput) || isTyping) return;
+        var msg = userInput.Trim();
+        userInput = string.Empty;
+        messages.Add(new ChatMessage(msg, true, DateTime.UtcNow));
+        isTyping = true;
+        StateHasChanged();
+
+        _cts = new CancellationTokenSource();
+        var responseBuilder = new System.Text.StringBuilder();
+
+        try
+        {
+            await foreach (var chunk in AgentService.ChatAsync(msg, _cts.Token))
+            {
+                responseBuilder.Append(chunk);
+                if (messages.LastOrDefault() is { IsUser: false } lastMsg)
+                    messages[^1] = lastMsg with { Content = responseBuilder.ToString() };
+                else
+                {
+                    messages.Add(new ChatMessage(responseBuilder.ToString(), false, DateTime.UtcNow));
+                    isTyping = false;
+                }
+                await InvokeAsync(StateHasChanged);
+            }
+            if (responseBuilder.Length == 0)
+                messages.Add(new ChatMessage("I could not process your request. Please try again.", false, DateTime.UtcNow));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            messages.Add(new ChatMessage($"Error: {ex.Message}", false, DateTime.UtcNow));
+        }
+        finally
+        {
+            isTyping = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task AskSuggestion(string question) { userInput = question; await SendMessage(); }
+
+    private async Task OnKeyDown(KeyboardEventArgs e) { if (e.Key == "Enter" && !e.ShiftKey) await SendMessage(); }
+
+    private void ClearChat() { messages.Clear(); AgentService.ClearHistory(); StateHasChanged(); }
+
+    private static string FormatMessage(string content) =>
+        System.Net.WebUtility.HtmlEncode(content).Replace("\n", "<br/>");
+
+    public void Dispose() { _cts?.Cancel(); _cts?.Dispose(); }
+}
