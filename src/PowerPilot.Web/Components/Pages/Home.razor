@@ -1,0 +1,129 @@
+@page "/"
+@rendermode InteractiveServer
+@using PowerPilot.Core.Interfaces
+@using PowerPilot.Core.Models
+@inject IEnergyStateService EnergyState
+@inject IEnergyRepository EnergyRepository
+@implements IDisposable
+
+<PageTitle>PowerPilot Dashboard</PageTitle>
+
+<div class="dashboard">
+    <div class="dashboard-header">
+        <h1>&#9889; PowerPilot Dashboard</h1>
+        <div class="status-badge @(EnergyState.CurrentTelegram != null ? "connected" : "disconnected")">
+            @(EnergyState.CurrentTelegram != null ? "● LIVE" : "○ No data")
+        </div>
+    </div>
+
+    @if (EnergyState.CurrentTelegram != null)
+    {
+        var t = EnergyState.CurrentTelegram;
+        <div class="power-cards">
+            <div class="card @(t.IsProducing ? "card-green" : "card-red")">
+                <div class="card-label">Net Power</div>
+                <div class="card-value">@(t.IsProducing ? "+" : "")@t.NetPower.ToString("F3") kW</div>
+                <div class="card-sub">@(t.IsProducing ? "Producing" : "Consuming")</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Grid Consumption</div>
+                <div class="card-value">@t.CurrentPowerUsage.ToString("F3") kW</div>
+                <div class="card-sub">Tariff @t.CurrentTariff</div>
+            </div>
+            <div class="card card-green">
+                <div class="card-label">Solar Production</div>
+                <div class="card-value">@t.CurrentPowerDelivery.ToString("F3") kW</div>
+                <div class="card-sub">Delivered to grid</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Gas</div>
+                <div class="card-value">@t.GasDelivered.ToString("F3") m³</div>
+                <div class="card-sub">Total</div>
+            </div>
+        </div>
+
+        <div class="meter-totals">
+            <h3>Meter Totals</h3>
+            <table class="totals-table">
+                <tr><th></th><th>Tariff 1 (Night)</th><th>Tariff 2 (Day)</th><th>Total</th></tr>
+                <tr>
+                    <td>Consumed from grid</td>
+                    <td>@t.ElectricityDeliveredTariff1.ToString("F3") kWh</td>
+                    <td>@t.ElectricityDeliveredTariff2.ToString("F3") kWh</td>
+                    <td>@((t.ElectricityDeliveredTariff1 + t.ElectricityDeliveredTariff2).ToString("F3")) kWh</td>
+                </tr>
+                <tr>
+                    <td>Returned to grid</td>
+                    <td>@t.ElectricityReturnedTariff1.ToString("F3") kWh</td>
+                    <td>@t.ElectricityReturnedTariff2.ToString("F3") kWh</td>
+                    <td>@((t.ElectricityReturnedTariff1 + t.ElectricityReturnedTariff2).ToString("F3")) kWh</td>
+                </tr>
+            </table>
+        </div>
+    }
+    else
+    {
+        <div class="no-data"><p>Waiting for P1 meter data...</p></div>
+    }
+
+    @if (todayStats != null)
+    {
+        <div class="today-stats">
+            <h3>Today's Summary</h3>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-label">Consumed</div>
+                    <div class="stat-value">@todayStats.TotalConsumed.ToString("F2") kWh</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Produced</div>
+                    <div class="stat-value">@todayStats.TotalProduced.ToString("F2") kWh</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Net Balance</div>
+                    <div class="stat-value @(todayStats.NetBalance >= 0 ? "positive" : "negative")">
+                        @(todayStats.NetBalance >= 0 ? "+" : "")@todayStats.NetBalance.ToString("F2") kWh
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Peak Consumption</div>
+                    <div class="stat-value">@todayStats.PeakConsumption.ToString("F2") kW</div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <div class="actions">
+        <a href="/chat" class="btn-chat">Ask PowerPilot</a>
+    </div>
+</div>
+
+@code {
+    private EnergyStats? todayStats;
+    private System.Threading.Timer? _refreshTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        EnergyState.StateUpdated += OnStateUpdated;
+        await LoadTodayStatsAsync();
+        _refreshTimer = new System.Threading.Timer(async _ =>
+        {
+            await LoadTodayStatsAsync();
+            await InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+    }
+
+    private async Task LoadTodayStatsAsync()
+    {
+        try { todayStats = await EnergyRepository.GetStatsAsync(DateTime.UtcNow.Date, DateTime.UtcNow); }
+        catch { }
+    }
+
+    private void OnStateUpdated(object? sender, P1Telegram telegram) => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        EnergyState.StateUpdated -= OnStateUpdated;
+        _refreshTimer?.Dispose();
+    }
+}

@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PowerPilot.Agents/PowerPilot.Agents.csproj" />
+    <Project Path="src/PowerPilot.Core/PowerPilot.Core.csproj" />
+    <Project Path="src/PowerPilot.Infrastructure/PowerPilot.Infrastructure.csproj" />
+    <Project Path="src/PowerPilot.P1Reader/PowerPilot.P1Reader.csproj" />
+    <Project Path="src/PowerPilot.Web/PowerPilot.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PowerPilot.Tests/PowerPilot.Tests.csproj" />
+  </Folder>
+</Solution>
