@@ -1,5 +1,3 @@
-using System.ComponentModel;
-using Microsoft.SemanticKernel;
 using PowerPilot.Core.Interfaces;
 
 namespace PowerPilot.Agents.Plugins;
@@ -9,8 +7,6 @@ public class WeatherPlugin
     private readonly IWeatherService _weatherService;
     public WeatherPlugin(IWeatherService weatherService) { _weatherService = weatherService; }
 
-    [KernelFunction("get_current_weather")]
-    [Description("Get the current weather conditions including temperature, cloud cover and wind speed")]
     public async Task<string> GetCurrentWeatherAsync()
     {
         var weather = await _weatherService.GetCurrentWeatherAsync();
@@ -20,8 +16,6 @@ public class WeatherPlugin
                $"Wind: {weather.WindSpeedMs:F1} m/s, Solar irradiance estimate: {weather.SolarIrradianceEstimate:F0} W/m²";
     }
 
-    [KernelFunction("get_solar_forecast")]
-    [Description("Get the solar production forecast based on weather forecast for the next 24 hours")]
     public async Task<string> GetSolarForecastAsync()
     {
         var forecast = (await _weatherService.GetForecastAsync(24)).ToList();

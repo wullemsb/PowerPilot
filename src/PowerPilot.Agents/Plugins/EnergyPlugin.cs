@@ -1,5 +1,3 @@
-using System.ComponentModel;
-using Microsoft.SemanticKernel;
 using PowerPilot.Core.Interfaces;
 using PowerPilot.Core.Models;
 
@@ -16,8 +14,6 @@ public class EnergyPlugin
         _stateService = stateService;
     }
 
-    [KernelFunction("get_current_power")]
-    [Description("Get the current real-time power consumption and production in kilowatts")]
     public string GetCurrentPower()
     {
         var telegram = _stateService.CurrentTelegram;
@@ -28,8 +24,6 @@ public class EnergyPlugin
                $"Tariff: {(telegram.CurrentTariff == 1 ? "Night (cheaper)" : "Day")}";
     }
 
-    [KernelFunction("get_today_stats")]
-    [Description("Get energy consumption and production statistics for today")]
     public async Task<string> GetTodayStatsAsync()
     {
         var today = DateTime.UtcNow.Date;
@@ -39,9 +33,7 @@ public class EnergyPlugin
                $"Peak consumption: {stats.PeakConsumption:F2} kW, Peak production: {stats.PeakProduction:F2} kW";
     }
 
-    [KernelFunction("get_energy_stats")]
-    [Description("Get energy statistics for a time period. period can be 'today', 'yesterday', 'week', 'month'")]
-    public async Task<string> GetEnergyStatsAsync([Description("Time period: today, yesterday, week, month")] string period = "today")
+    public async Task<string> GetEnergyStatsAsync(string period = "today")
     {
         var (from, to) = period.ToLower() switch
         {
@@ -55,8 +47,6 @@ public class EnergyPlugin
                $"Net: {stats.NetBalance:F2} kWh, Peak consumption: {stats.PeakConsumption:F2} kW, Based on {stats.ReadingCount} readings";
     }
 
-    [KernelFunction("get_hourly_profile")]
-    [Description("Get the hourly energy consumption profile for today to understand usage patterns")]
     public async Task<string> GetHourlyProfileAsync()
     {
         var readings = await _repository.GetHourlyAveragesAsync(DateTime.UtcNow.Date, DateTime.UtcNow);
@@ -66,9 +56,7 @@ public class EnergyPlugin
         return $"Hourly profile (+ = producing, - = consuming): {profile}";
     }
 
-    [KernelFunction("get_appliance_advice")]
-    [Description("Get advice on when to run high-power appliances like dishwasher, washing machine, dryer")]
-    public async Task<string> GetApplianceAdviceAsync([Description("Appliance name e.g. dishwasher, washing machine, dryer, EV charger")] string appliance)
+    public async Task<string> GetApplianceAdviceAsync(string appliance)
     {
         var telegram = _stateService.CurrentTelegram;
         var hourlyReadings = (await _repository.GetHourlyAveragesAsync(DateTime.UtcNow.Date.AddDays(-7), DateTime.UtcNow)).ToList();
