@@ -22,10 +22,33 @@ public static class PowerPilotAgentFactory
             clientOptions.GitHubToken = options.GitHubToken;
 
         if (!string.IsNullOrEmpty(options.CliPath))
+        {
             clientOptions.CliPath = options.CliPath;
+        }
+
+        if (!string.IsNullOrEmpty(options.CliUrl))
+        {
+            clientOptions.CliUrl = options.CliUrl;
+            clientOptions.UseStdio = false;
+        }
 
         if (logger != null)
             clientOptions.Logger = logger;
+
+        clientOptions.Telemetry = new TelemetryConfig
+        {
+            OtlpEndpoint = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT"),
+            CaptureContent = true,
+            ExporterType = "oltp-http",
+        };
+        //Export to file
+        //clientOptions.Telemetry = new TelemetryConfig
+        //{
+        //    FilePath = "copilot_client_telemetry.log",
+        //    CaptureContent = true,
+        //    ExporterType = "file",
+        //   
+        //};
 
         return new CopilotClient(clientOptions);
     }

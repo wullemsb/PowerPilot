@@ -18,6 +18,8 @@ public class AgentOptions
     /// </summary>
     public string? CliPath { get; set; }
 
+    public string? CliUrl { get; set; }
+
     /// <summary>
     /// GitHub Copilot model to use, e.g. "gpt-4.1", "claude-sonnet-4.5".
     /// See <c>CopilotClient.ListModelsAsync()</c> for available models.

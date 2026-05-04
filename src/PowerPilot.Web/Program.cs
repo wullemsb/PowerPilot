@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using OpenTelemetry.Trace;
 using PowerPilot.Agents;
 using PowerPilot.Agents.Plugins;
 using PowerPilot.Core.Interfaces;
@@ -10,6 +11,8 @@ using PowerPilot.Web.Hubs;
 using PowerPilot.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.AddServiceDefaults();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -58,6 +61,8 @@ builder.Services.AddScoped<ChatAgentService>();
 builder.Services.AddHostedService<P1BackgroundService>();
 
 var app = builder.Build();
+
+app.MapDefaultEndpoints();
 
 using (var scope = app.Services.CreateScope())
 {

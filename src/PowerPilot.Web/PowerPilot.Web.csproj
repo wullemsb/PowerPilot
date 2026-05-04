@@ -5,6 +5,7 @@
     <ProjectReference Include="..\PowerPilot.P1Reader\PowerPilot.P1Reader.csproj" />
     <ProjectReference Include="..\PowerPilot.Infrastructure\PowerPilot.Infrastructure.csproj" />
     <ProjectReference Include="..\PowerPilot.Agents\PowerPilot.Agents.csproj" />
+    <ProjectReference Include="..\PowerPilot.ServiceDefaults\PowerPilot.ServiceDefaults.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -9,4 +9,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/PowerPilot.Tests/PowerPilot.Tests.csproj" />
   </Folder>
+  <Project Path="src/PowerPilot.AppHost/PowerPilot.AppHost.csproj" Id="e2af6587-11ef-41a8-a62d-371fe9b64bf3" />
+  <Project Path="src/PowerPilot.ServiceDefaults/PowerPilot.ServiceDefaults.csproj" />
 </Solution>
