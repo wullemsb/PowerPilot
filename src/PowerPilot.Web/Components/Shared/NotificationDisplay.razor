@@ -1,0 +1,138 @@
+@using PowerPilot.Core.Models
+@using PowerPilot.Web.Services
+@inject NotificationService NotificationService
+@implements IDisposable
+
+<div class="notification-container">
+    @foreach (var notification in _activeNotifications.OrderByDescending(n => n.Timestamp))
+    {
+        <div class="notification @GetSeverityClass(notification.Severity) @(notification.IsRead ? "read" : "")"
+             @key="notification.Id">
+            <div class="notification-header">
+                <span class="notification-icon">@GetSeverityIcon(notification.Severity)</span>
+                <span class="notification-time">@GetTimeAgo(notification.Timestamp)</span>
+                <button class="notification-close" @onclick="() => DismissNotification(notification.Id)">×</button>
+            </div>
+            <div class="notification-body">
+                <div class="notification-message">@notification.Message</div>
+                <div class="notification-surplus">⚡ Surplus: @notification.EnergySurplusKw.ToString("F2") kW</div>
+
+                @if (_showDebugInfo && notification.AgentContributions.Any())
+                {
+                    <div class="notification-debug">
+                        <details>
+                            <summary>Agent Contributions (@notification.AgentContributions.Count)</summary>
+                            @foreach (var contribution in notification.AgentContributions)
+                            {
+                                <div class="agent-contribution">
+                                    <strong>@contribution.Key:</strong>
+                                    <span>@contribution.Value</span>
+                                </div>
+                            }
+                        </details>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<EnergyNotification> _activeNotifications = new();
+    private readonly Dictionary<string, System.Threading.Timer> _autoDismissTimers = new();
+    private bool _showDebugInfo = false;
+
+    protected override void OnInitialized()
+    {
+        NotificationService.NotificationReceived += OnNotificationReceived;
+
+        // Check if debug mode is enabled via query string or local storage
+        // For now, can be toggled by setting _showDebugInfo = true manually
+    }
+
+    private void OnNotificationReceived(object? sender, EnergyNotification notification)
+    {
+        InvokeAsync(() =>
+        {
+            _activeNotifications.Add(notification);
+            StateHasChanged();
+
+            // Set up auto-dismiss timer (30 seconds)
+            var timer = new System.Threading.Timer(_ => 
+            {
+                InvokeAsync(() => DismissNotification(notification.Id));
+            }, null, TimeSpan.FromSeconds(30), Timeout.InfiniteTimeSpan);
+
+            _autoDismissTimers[notification.Id] = timer;
+        });
+    }
+
+    private void DismissNotification(string notificationId)
+    {
+        var notification = _activeNotifications.FirstOrDefault(n => n.Id == notificationId);
+        if (notification != null)
+        {
+            _activeNotifications.Remove(notification);
+
+            // Cancel and dispose the timer
+            if (_autoDismissTimers.TryGetValue(notificationId, out var timer))
+            {
+                timer.Dispose();
+                _autoDismissTimers.Remove(notificationId);
+            }
+
+            // Mark as read in the service
+            _ = NotificationService.MarkAsReadAsync(notificationId);
+
+            StateHasChanged();
+        }
+    }
+
+    private string GetSeverityClass(NotificationSeverity severity)
+    {
+        return severity switch
+        {
+            NotificationSeverity.Success => "severity-success",
+            NotificationSeverity.Warning => "severity-warning",
+            NotificationSeverity.Important => "severity-important",
+            _ => "severity-info"
+        };
+    }
+
+    private string GetSeverityIcon(NotificationSeverity severity)
+    {
+        return severity switch
+        {
+            NotificationSeverity.Success => "✓",
+            NotificationSeverity.Warning => "⚠",
+            NotificationSeverity.Important => "!",
+            _ => "ℹ"
+        };
+    }
+
+    private string GetTimeAgo(DateTime timestamp)
+    {
+        var elapsed = DateTime.UtcNow - timestamp;
+
+        if (elapsed.TotalMinutes < 1)
+            return "just now";
+        if (elapsed.TotalMinutes < 60)
+            return $"{(int)elapsed.TotalMinutes}m ago";
+        if (elapsed.TotalHours < 24)
+            return $"{(int)elapsed.TotalHours}h ago";
+
+        return timestamp.ToLocalTime().ToString("MMM d, HH:mm");
+    }
+
+    public void Dispose()
+    {
+        NotificationService.NotificationReceived -= OnNotificationReceived;
+
+        // Dispose all timers
+        foreach (var timer in _autoDismissTimers.Values)
+        {
+            timer.Dispose();
+        }
+        _autoDismissTimers.Clear();
+    }
+}

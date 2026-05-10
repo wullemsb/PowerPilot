@@ -21,6 +21,7 @@ builder.Services.AddSignalR();
 builder.Services.Configure<P1ReaderOptions>(builder.Configuration.GetSection("P1Reader"));
 builder.Services.Configure<WeatherOptions>(builder.Configuration.GetSection("Weather"));
 builder.Services.Configure<AgentOptions>(builder.Configuration.GetSection("Agent"));
+builder.Services.Configure<EnergyMonitoringOptions>(builder.Configuration.GetSection("EnergyMonitoring"));
 
 var dbPath = Path.Combine(builder.Environment.ContentRootPath, "powerpilot.db");
 builder.Services.AddDbContext<EnergyDbContext>(options =>
@@ -28,6 +29,8 @@ builder.Services.AddDbContext<EnergyDbContext>(options =>
 
 builder.Services.AddSingleton<EnergyStateService>();
 builder.Services.AddSingleton<IEnergyStateService>(sp => sp.GetRequiredService<EnergyStateService>());
+builder.Services.AddSingleton<NotificationService>();
+builder.Services.AddSingleton<INotificationService>(sp => sp.GetRequiredService<NotificationService>());
 builder.Services.AddScoped<IEnergyRepository, EnergyRepository>();
 
 builder.Services.AddHttpClient();
@@ -58,7 +61,9 @@ builder.Services.AddScoped<EnergyPlugin>();
 builder.Services.AddScoped<WeatherPlugin>();
 builder.Services.AddScoped<ChatAgentService>();
 
+// Background services
 builder.Services.AddHostedService<P1BackgroundService>();
+builder.Services.AddHostedService<EnergyMonitoringAgentService>();
 
 var app = builder.Build();
 

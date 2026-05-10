@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <ItemGroup>
     <ProjectReference Include="..\PowerPilot.Core\PowerPilot.Core.csproj" />
@@ -6,6 +6,10 @@
     <ProjectReference Include="..\PowerPilot.Infrastructure\PowerPilot.Infrastructure.csproj" />
     <ProjectReference Include="..\PowerPilot.Agents\PowerPilot.Agents.csproj" />
     <ProjectReference Include="..\PowerPilot.ServiceDefaults\PowerPilot.ServiceDefaults.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Models\" />
   </ItemGroup>
 
   <PropertyGroup>
