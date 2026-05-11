@@ -76,9 +76,11 @@ h1:focus {
 .stat-value.positive { color: #28a745; }
 .stat-value.negative { color: #dc3545; }
 .no-data { text-align: center; padding: 3rem; color: #6c757d; font-size: 1.1rem; }
-.actions { text-align: center; margin-top: 1.5rem; }
+.actions { display: flex; justify-content: center; gap: 0.75rem; margin-top: 1.5rem; }
 .btn-chat { display: inline-block; padding: 0.75rem 2rem; background: #0066cc; color: white; border-radius: 25px; text-decoration: none; font-weight: bold; font-size: 1rem; transition: background 0.2s; }
 .btn-chat:hover { background: #0052a3; color: white; text-decoration: none; }
+.btn-notification { padding: 0.75rem 1.25rem; background: #28a745; color: white; border: none; border-radius: 25px; font-weight: bold; font-size: 1rem; cursor: pointer; transition: background 0.2s; }
+.btn-notification:hover { background: #218838; }
 .chat-container { max-width: 800px; margin: 0 auto; height: calc(100vh - 120px); display: flex; flex-direction: column; padding: 1rem; }
 .chat-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 1rem; border-bottom: 1px solid #dee2e6; margin-bottom: 1rem; }
 .chat-header h2 { margin: 0; font-size: 1.3rem; }

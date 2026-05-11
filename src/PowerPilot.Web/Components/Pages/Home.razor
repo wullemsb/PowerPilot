@@ -4,6 +4,7 @@
 @using PowerPilot.Core.Models
 @inject IEnergyStateService EnergyState
 @inject IEnergyRepository EnergyRepository
+@inject INotificationService NotificationService
 @implements IDisposable
 
 <PageTitle>PowerPilot Dashboard</PageTitle>
@@ -94,6 +95,7 @@
     }
 
     <div class="actions">
+        <button class="btn-notification" @onclick="TriggerTestNotificationAsync">Test Notification</button>
         <a href="/chat" class="btn-chat">Ask PowerPilot</a>
     </div>
 </div>
@@ -120,6 +122,20 @@
     }
 
     private void OnStateUpdated(object? sender, P1Telegram telegram) => InvokeAsync(StateHasChanged);
+
+    private async Task TriggerTestNotificationAsync()
+    {
+        await NotificationService.AddNotificationAsync(new EnergyNotification
+        {
+            Message = "Manual test notification from dashboard.",
+            Severity = NotificationSeverity.Info,
+            EnergySurplusKw = EnergyState.CurrentTelegram?.NetPower ?? 0m,
+            AgentContributions = new Dictionary<string, string>
+            {
+                ["manual_trigger"] = "Notification manually triggered from the home screen"
+            }
+        });
+    }
 
     public void Dispose()
     {
