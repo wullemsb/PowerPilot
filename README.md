@@ -31,6 +31,62 @@ src/
 └── PowerPilot.P1Reader          # P1 smart meter communication
 ```
 
+```mermaid
+flowchart LR
+ 
+  subgraph Presentation[Web App]
+    Web[PowerPilot.Web]
+    Hub[EnergyHub]
+    State[EnergyStateService]
+    Notify[NotificationService]
+  end
+
+  subgraph Intelligence[AI Layer]
+    Chat[ChatAgentService]
+    Factory[PowerPilotAgentFactory]
+    EnergyPlugin[EnergyPlugin]
+    WeatherPlugin[WeatherPlugin]
+  end
+
+  subgraph Domain[Domain Layer]
+    Core[PowerPilot.Core]
+    Interfaces[Interfaces]
+    Models[Models]
+  end
+
+  subgraph Infrastructure[Infrastructure Layer]
+    Db[EnergyDbContext / EnergyRepository]
+    Weather[OpenWeatherMapService]
+  end
+
+  subgraph Devices[Device Access]
+    P1Reader[SerialP1Reader]
+    Parser[DsmrP1Parser]
+  end
+
+
+  Web --> Hub
+  Web --> State
+  Web --> Notify
+  Web --> Chat
+  Web --> Db
+  Web --> Weather
+  Web --> P1Reader
+
+  Chat --> Factory
+  Factory --> EnergyPlugin
+  Factory --> WeatherPlugin
+  EnergyPlugin --> Db
+  EnergyPlugin --> State
+  WeatherPlugin --> Weather
+
+  P1Reader --> Parser
+  Parser --> Core
+  Db --> Core
+  Weather --> Core
+  State --> Hub
+```
+
 ### Key Technologies
 
 - **.NET 8**: Modern cross-platform framework
