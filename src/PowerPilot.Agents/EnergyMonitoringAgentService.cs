@@ -158,6 +158,7 @@ public class EnergyMonitoringAgentService : BackgroundService
                 return;
             }
 
+
             var prompt = $$"""
                 URGENT ENERGY SURPLUS DETECTED
 
@@ -165,26 +166,17 @@ public class EnergyMonitoringAgentService : BackgroundService
                 - Net power production: {{energySurplusKw:F2}} kW
                 - This surplus has been sustained for {{_options.ThresholdDurationMinutes}} minutes
 
-                You are a multi-agent energy monitoring system. Analyze this situation by taking on three specialized roles:
+                Please coordinate with your specialized agents to analyze this situation:
 
-                1. ENERGY ANALYZER ROLE: Evaluate the current energy surplus
-                   - Use get_current_power and get_today_stats
-                   - Assess magnitude, duration, and tariff implications
+                1. Ask the energy_analyzer agent to evaluate the current surplus situation
+                2. Ask the appliance_advisor agent to recommend 1-2 specific appliances
+                3. Ask the timing_optimizer agent to determine urgency and timing
 
-                2. APPLIANCE ADVISOR ROLE: Recommend specific appliances
-                   - Use get_appliance_advice and get_hourly_profile
-                   - Suggest 1-2 high-energy appliances (EV charger 7.4kW, dryer 3kW, dishwasher 1.8kW, etc.)
-                   - Consider historical patterns
+                Then synthesize their insights into ONE clear notification message.
 
-                3. TIMING OPTIMIZER ROLE: Determine urgency
-                   - Use get_current_weather and get_solar_forecast if available
-                   - Provide specific timing guidance
-
-                Synthesize your analysis into a single, clear, actionable notification (2-3 sentences max).
-
-                Format your response as JSON:
+                Return your response as JSON:
                 {
-                    "message": "Your synthesized notification message here",
+                    "message": "Your synthesized notification message (2-3 sentences max)",
                     "severity": "info|success|warning|important"
                 }
                 """;
@@ -303,28 +295,129 @@ public class EnergyMonitoringAgentService : BackgroundService
                 Model = "gpt-4.1",
                 Streaming = true,
                 OnPermissionRequest = PermissionHandler.ApproveAll,
-                Tools = tools.ToList(),
-                SystemMessage = new SystemMessageConfig
+                ExcludedTools= tools.Select(t=> t.Name).ToList(), // Exclude all tools from the main agent - they will be used by specialized agents
+                Tools= tools.ToList(),
+                Agent = "monitor", // Start with the orchestrator agent
+                CustomAgents = new List<CustomAgentConfig>
                 {
-                    Mode = SystemMessageMode.Append,
-                    Content = """
-                        You are the PowerPilot Energy Monitoring Agent - a multi-role AI assistant specialized in home energy optimization.
+                    new()
+                    {
+                        Name = "monitor",
+                        DisplayName = "Energy Monitor Orchestrator",
+                        Description = "Orchestrates multi-agent analysis to provide actionable energy insights. Delegates to specialized agents.",
+                        Prompt = """
+                        You are the PowerPilot Energy Monitor Orchestrator. You coordinate specialized agents to analyze energy situations.
 
-                        You can operate in multiple specialized roles to provide comprehensive analysis:
+                        Available specialized agents:
+                        - **energy_analyzer**: Call this agent to evaluate current energy surplus, production/consumption patterns
+                        - **appliance_advisor**: Call this agent to get appliance recommendations based on current surplus
+                        - **timing_optimizer**: Call this agent to determine urgency and optimal timing windows
 
-                        **Energy Analyzer**: Evaluates production/consumption patterns, identifies surplus magnitude and duration
-                        **Appliance Advisor**: Recommends specific high-energy appliances based on availability and patterns
-                        **Timing Optimizer**: Determines urgency and optimal timing based on weather and forecasts
+                        When you receive an energy surplus alert:
+                        1. Delegate to energy_analyzer to assess the situation
+                        2. Delegate to appliance_advisor to get specific recommendations
+                        3. Delegate to timing_optimizer to determine urgency
+                        4. Synthesize their responses into ONE concise notification (2-3 sentences max)
+                        5. Return ONLY a JSON response in this format:
+                        {
+                            "message": "Your synthesized notification here",
+                            "severity": "info|success|warning|important"
+                        }
 
-                        When analyzing energy surplus situations:
-                        1. Always call relevant tools to gather current data
-                        2. Think through each specialized role's perspective
-                        3. Synthesize insights into clear, actionable notifications
-                        4. Be specific with appliance names and timing guidance
-                        5. Keep messages concise (2-3 sentences maximum)
-
-                        Your goal is to help homeowners maximize their solar energy usage by providing timely, actionable recommendations.
+                        Keep the final message actionable, specific, and concise.
                         """
+                    },
+                    new()
+                    {
+                        Name = "energy_analyzer",
+                        DisplayName = "Energy Analyzer",
+                        Description = "Evaluates production/consumption patterns, identifies surplus magnitude and duration, assesses tariff implications.",
+                        Tools = new List<string> 
+                        { 
+                            "get_current_power", 
+                            "get_today_stats",
+                            "get_energy_stats",
+                            "get_hourly_profile"
+                        },
+                        Prompt = """
+                        You are the Energy Analyzer agent. Your role is to evaluate the current energy situation.
+
+                        When asked to analyze energy surplus:
+                        1. Call get_current_power to understand current net production
+                        2. Call get_today_stats to see daily context
+                        3. Call get_hourly_profile to identify patterns
+                        4. Assess the magnitude and significance of the surplus
+                        5. Consider tariff implications (day vs night rates)
+
+                        Provide a brief analysis focusing on:
+                        - How much surplus energy is available
+                        - How significant this surplus is compared to typical patterns
+                        - How long this surplus might last based on hourly patterns
+
+                        Keep your response concise and data-driven.
+                        """
+                    },
+                    new()
+                    {
+                        Name = "appliance_advisor",
+                        DisplayName = "Appliance Advisor",
+                        Description = "Recommends specific high-energy appliances to run based on available surplus and historical patterns.",
+                        Tools = new List<string> 
+                        { 
+                            "get_current_power",
+                            "get_appliance_advice",
+                            "get_hourly_profile"
+                        },
+                        Prompt = """
+                        You are the Appliance Advisor agent. Your role is to recommend which appliances to run.
+
+                        High-power appliances and their typical consumption:
+                        - EV Charger: 7.4 kW
+                        - Dryer: 3.0 kW  
+                        - Washing Machine: 2.0 kW
+                        - Dishwasher: 1.8 kW
+
+                        When asked for recommendations:
+                        1. Call get_current_power to see available surplus
+                        2. Call get_appliance_advice for 1-2 relevant appliances
+                        3. Consider which appliances fit the available surplus
+                        4. Prioritize appliances that match the surplus magnitude
+
+                        Provide specific recommendations:
+                        - Which 1-2 appliances should be run NOW
+                        - Why those appliances are good matches for the current surplus
+
+                        Be specific with appliance names. Keep response brief.
+                        """
+                    },
+                    new()
+                    {
+                        Name = "timing_optimizer",
+                        DisplayName = "Timing Optimizer",
+                        Description = "Determines urgency and optimal timing windows based on weather forecasts and solar production predictions.",
+                        Tools = new List<string> 
+                        { 
+                            "get_current_weather",
+                            "get_solar_forecast",
+                            "get_hourly_profile"
+                        },
+                        Prompt = """
+                        You are the Timing Optimizer agent. Your role is to determine timing urgency.
+
+                        When asked about timing:
+                        1. Call get_current_weather to assess current solar conditions
+                        2. Call get_solar_forecast to predict upcoming production
+                        3. Determine how long the surplus will likely last
+                        4. Assess urgency based on cloud cover and forecast trends
+
+                        Provide timing guidance:
+                        - How urgent is it to act NOW vs later
+                        - How long the surplus window is likely to last
+                        - Whether conditions will improve or worsen soon
+
+                        Be specific with timing windows (e.g., "next 2 hours", "before 3pm").
+                        """
+                    }
                 }
             }, cancellationToken);
 
