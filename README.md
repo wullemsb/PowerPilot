@@ -2,6 +2,8 @@
 
 An intelligent home energy management assistant built with .NET 8, Blazor, and GitHub Copilot SDK. PowerPilot helps homeowners understand their electricity consumption, solar production, and gas usage by analyzing real-time data from P1 smart meters.
 
+![PowerPilot](/PowerPilot.png)
+
 ![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4)
 ![Blazor](https://img.shields.io/badge/Blazor-WebAssembly-512BD4)
 ![GitHub Copilot SDK](https://img.shields.io/badge/GitHub_Copilot-SDK-000000)
