@@ -162,6 +162,7 @@ Create or edit `src/PowerPilot.Web/appsettings.Development.json`:
   },
   "MeterSource": "Choose: Simulated , Serial , HomeWizard",
   "P1Reader": {
+    "Mode": "Serial",
     "SerialPort": "COM3",
     "BaudRate": 115200
   },
