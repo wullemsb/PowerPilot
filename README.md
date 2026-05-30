@@ -104,7 +104,7 @@ flowchart LR
 
 ## Prerequisites
 
-- [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) or later
+- [.NET 10.0 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) or later
 - [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli) - Required for AI assistant features
 - A DSMR-compliant P1 smart meter (for production use) or use simulated mode
   - Like the ones found here: https://www.fluvius.be/nl/meters-en-meterstanden/digitale-meter/hoe-werkt-mijn-digitale-meter/handleidingen-digitale-elektriciteitsmeters
