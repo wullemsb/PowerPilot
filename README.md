@@ -134,7 +134,8 @@ cd PowerPilot
 cd src/PowerPilot.Web
 dotnet user-secrets init
 dotnet user-secrets set "Agent:GitHubToken" "your-github-token"
-dotnet user-secrets set "OpenWeatherMap:ApiKey" "your-api-key"
+dotnet user-secrets set "Weather:ApiKey" "your-api-key"
+dotnet user-secrets set "Weather:City" "Brussels"
 dotnet user-secrets set "P1Reader:SerialPort" "COM3"  # or /dev/ttyUSB0 on Linux
 ```
 
@@ -150,11 +151,10 @@ Create or edit `src/PowerPilot.Web/appsettings.Development.json`:
     "CliPath": null,
     "CliUrl": null
   },
-  "OpenWeatherMap": {
+  "Weather": {
     "ApiKey": "your-api-key-here",
-    "Latitude": 51.5074,
-    "Longitude": -0.1278,
-    "CityName": "London"
+    "City": "Brussels",
+    "Units": "metric"
   },
   "P1Reader": {
     "SerialPort": "COM3",
@@ -205,7 +205,7 @@ Configure the AI agent in `appsettings.json`:
 ```
 
 - **GitHubToken**: Your GitHub personal access token with Copilot access
-- **Model**: GitHub Copilot model to use (e.g., `gpt-4.1`, `claude-sonnet-4.5`)
+- **Model**: GitHub Copilot model to use for both interactive chat and background monitoring (e.g., `gpt-4.1`, `claude-sonnet-4.5`)
 - **CliPath**: Optional custom path to Copilot CLI binary
 - **CliUrl**: Optional URL for remote Copilot CLI service
 
@@ -227,11 +227,10 @@ Set `UseSimulated` to `true` for development/testing without a physical smart me
 
 ```json
 {
-  "OpenWeatherMap": {
+  "Weather": {
     "ApiKey": "your-api-key",
-    "Latitude": 51.5074,
-    "Longitude": -0.1278,
-    "CityName": "London"
+    "City": "Brussels",
+    "Units": "metric"
   }
 }
 ```

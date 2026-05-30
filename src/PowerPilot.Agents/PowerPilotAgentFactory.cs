@@ -1,6 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using GitHub.Copilot.SDK;
+using GitHub.Copilot;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using PowerPilot.Agents.Plugins;
@@ -17,19 +17,20 @@ public static class PowerPilotAgentFactory
     public static CopilotClient CreateClient(AgentOptions options, ILogger? logger = null)
     {
         var clientOptions = new CopilotClientOptions();
+        //This should be the default
+        clientOptions.Connection = RuntimeConnection.ForStdio();
 
         if (!string.IsNullOrEmpty(options.GitHubToken))
             clientOptions.GitHubToken = options.GitHubToken;
 
         if (!string.IsNullOrEmpty(options.CliPath))
         {
-            clientOptions.CliPath = options.CliPath;
+            clientOptions.Connection = RuntimeConnection.ForStdio(options.CliPath);
         }
 
         if (!string.IsNullOrEmpty(options.CliUrl))
         {
-            clientOptions.CliUrl = options.CliUrl;
-            clientOptions.UseStdio = false;
+            clientOptions.Connection = RuntimeConnection.ForUri(options.CliUrl);
         }
 
         if (logger != null)
@@ -58,53 +59,56 @@ public static class PowerPilotAgentFactory
     /// Copilot session.  All tools are marked <c>skip_permission</c> because they are
     /// read-only data lookups that require no user confirmation.
     /// </summary>
-    public static IReadOnlyList<AIFunction> BuildTools(
+    public static IReadOnlyList<AIFunctionDeclaration> BuildTools(
         EnergyPlugin energyPlugin,
         WeatherPlugin weatherPlugin)
     {
         // All our tools are safe read-only lookups — skip the permission prompt.
-        var skipPermission = new ReadOnlyDictionary<string, object?>(
-            new Dictionary<string, object?> { ["skip_permission"] = true });
-
-        AIFunction Tool(Delegate fn, string name, string description) =>
-            AIFunctionFactory.Create(fn, new AIFunctionFactoryOptions
-            {
-                Name = name,
-                Description = description,
-                AdditionalProperties = skipPermission,
-            });
+        var toolOptions = new CopilotToolOptions
+        {
+            SkipPermission = true,
+        };
 
         return new List<AIFunction>
         {
-            Tool(() => energyPlugin.GetCurrentPower(),
-                "get_current_power",
-                "Get the current real-time power consumption and production in kilowatts"),
-
-            Tool(() => energyPlugin.GetTodayStatsAsync(),
-                "get_today_stats",
-                "Get energy consumption and production statistics for today"),
-
-            Tool(([Description("Time period: today, yesterday, week, or month")] string period = "today")
-                    => energyPlugin.GetEnergyStatsAsync(period),
-                "get_energy_stats",
-                "Get energy statistics for a given time period"),
-
-            Tool(() => energyPlugin.GetHourlyProfileAsync(),
-                "get_hourly_profile",
-                "Get the hourly energy profile for today to understand usage patterns"),
-
-            Tool(([Description("Appliance name, e.g. dishwasher, washing machine, dryer, EV charger")] string appliance)
-                    => energyPlugin.GetApplianceAdviceAsync(appliance),
-                "get_appliance_advice",
-                "Get advice on the best time to run a high-power appliance based on current and historical production data"),
-
-            Tool(() => weatherPlugin.GetCurrentWeatherAsync(),
-                "get_current_weather",
-                "Get current weather including temperature, cloud cover, and estimated solar irradiance"),
-
-            Tool(() => weatherPlugin.GetSolarForecastAsync(),
-                "get_solar_forecast",
-                "Get the solar production forecast for the next 24 hours based on weather data"),
+            CopilotTool.DefineTool(()=> energyPlugin.GetCurrentPower(),
+                toolOptions,new AIFunctionFactoryOptions() 
+                { 
+                    Name = "get_current_power", 
+                    Description= "Get the current real-time power consumption and production in kilowatts" 
+                }),
+            CopilotTool.DefineTool(()=> energyPlugin.GetTodayStatsAsync(),toolOptions, new AIFunctionFactoryOptions()
+                {
+                    Name = "get_today_stats",
+                    Description= "Get energy consumption and production statistics for today"
+                }),
+            CopilotTool.DefineTool(([Description("Time period: today, yesterday, week, or month")] string period = "today")
+                => energyPlugin.GetEnergyStatsAsync(period),toolOptions, new AIFunctionFactoryOptions()
+                {
+                    Name = "get_energy_stats",
+                    Description= "Get energy statistics for a given time period"
+                }),
+            CopilotTool.DefineTool(() =>energyPlugin.GetHourlyProfileAsync(), toolOptions, new AIFunctionFactoryOptions()
+                {
+                    Name = "get_hourly_profile",
+                    Description= "Get the hourly energy profile for today to understand usage patterns"
+                }),
+            CopilotTool.DefineTool(([Description("Appliance name, e.g. dishwasher, washing machine, dryer, EV charger")] string appliance)
+                    => energyPlugin.GetApplianceAdviceAsync(appliance),toolOptions, new AIFunctionFactoryOptions()
+                    {
+                        Name = "get_appliance_advice",
+                        Description= "Get advice on the best time to run a high-power appliance based on current and historical production data"
+                    }),
+            CopilotTool.DefineTool(()=> weatherPlugin.GetCurrentWeatherAsync(),toolOptions, new AIFunctionFactoryOptions()
+                    {
+                        Name = "get_weather_forecast",
+                        Description= "Get current weather including temperature, cloud cover, and estimated solar irradiance"
+                    }),
+            CopilotTool.DefineTool(()=> weatherPlugin.GetSolarForecastAsync(),toolOptions, new AIFunctionFactoryOptions()
+                    {
+                        Name = "get_solar_forecast",
+                        Description= "Get the solar production forecast for the next 24 hours based on weather data" 
+                    })
         }.AsReadOnly();
     }
 }

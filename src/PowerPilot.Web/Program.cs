@@ -52,7 +52,7 @@ else
 builder.Services.AddSingleton(sp =>
 {
     var agentOptions = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgentOptions>>().Value;
-    var logger = sp.GetRequiredService<ILogger<GitHub.Copilot.SDK.CopilotClient>>();
+    var logger = sp.GetRequiredService<ILogger<GitHub.Copilot.CopilotClient>>();
     return PowerPilotAgentFactory.CreateClient(agentOptions, logger);
 });
 

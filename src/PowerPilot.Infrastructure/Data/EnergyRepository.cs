@@ -23,7 +23,10 @@ public class EnergyRepository : IEnergyRepository
 
     public async Task<EnergyStats> GetStatsAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default)
     {
-        var readings = await _context.EnergyReadings.Where(r => r.Timestamp >= from && r.Timestamp <= to).ToListAsync(cancellationToken);
+        var readings = await _context.EnergyReadings
+            .Where(r => r.Timestamp >= from && r.Timestamp <= to)
+            .OrderBy(r => r.Timestamp)
+            .ToListAsync(cancellationToken);
         if (!readings.Any()) return new EnergyStats { From = from, To = to };
 
         var first = readings.First();
@@ -43,7 +46,10 @@ public class EnergyRepository : IEnergyRepository
 
     public async Task<IEnumerable<EnergyReading>> GetHourlyAveragesAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default)
     {
-        var readings = await _context.EnergyReadings.Where(r => r.Timestamp >= from && r.Timestamp <= to).OrderBy(r => r.Timestamp).ToListAsync(cancellationToken);
+        var readings = await _context.EnergyReadings
+            .Where(r => r.Timestamp >= from && r.Timestamp <= to)
+            .OrderBy(r => r.Timestamp)
+            .ToListAsync(cancellationToken);
         return readings
             .GroupBy(r => new DateTime(r.Timestamp.Year, r.Timestamp.Month, r.Timestamp.Day, r.Timestamp.Hour, 0, 0, DateTimeKind.Utc))
             .Select(g => new EnergyReading

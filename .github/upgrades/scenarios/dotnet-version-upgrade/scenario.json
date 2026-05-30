@@ -1,0 +1,9 @@
+{
+  "scenarioId": "dotnet-version-upgrade",
+  "operationId": "8b35568b-3272-4a0c-abf8-9a1212c4af24",
+  "description": "Upgrade .NET projects to newer .NET versions",
+  "startTime": "2026-05-30T09:34:28.0007528Z",
+  "lastUpdateTime": "2026-05-30T09:34:28.044759Z",
+  "properties": {},
+  "folderPath": ""
+}

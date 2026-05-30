@@ -1,5 +1,5 @@
 using System.Threading.Channels;
-using GitHub.Copilot.SDK;
+using GitHub.Copilot;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -47,7 +47,7 @@ public sealed class ChatAgentService : IAsyncDisposable
 
     private readonly ILogger<ChatAgentService> _logger;
     private readonly CopilotClient _client;
-    private readonly IReadOnlyList<AIFunction> _tools;
+    private readonly IReadOnlyList<AIFunctionDeclaration> _tools;
     private readonly string _model;
 
     private CopilotSession? _session;
@@ -102,7 +102,8 @@ public sealed class ChatAgentService : IAsyncDisposable
             new UnboundedChannelOptions { SingleWriter = true, SingleReader = true });
 
         IDisposable? subscription = null;
-        subscription = session.On(evt =>
+
+        subscription = session.On<SessionEvent>(evt =>
         {
             switch (evt)
             {

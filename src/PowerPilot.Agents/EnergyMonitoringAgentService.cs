@@ -1,4 +1,4 @@
-using GitHub.Copilot.SDK;
+using GitHub.Copilot;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,17 +17,89 @@ namespace PowerPilot.Agents;
 /// </summary>
 public class EnergyMonitoringAgentService : BackgroundService
 {
+    private static readonly IReadOnlyList<MonitoringSubAgentDefinition> AvailableSubAgents =
+    [
+        new MonitoringSubAgentDefinition(
+            "energy_analyzer",
+            "Energy Analyzer",
+            "Evaluates production/consumption patterns, identifies surplus magnitude and duration, assesses tariff implications.",
+            """
+            You are the Energy Analyzer agent. Your role is to evaluate the current energy situation.
+
+            When asked to analyze energy surplus:
+            1. Call get_current_power to understand current net production
+            2. Call get_today_stats to see daily context
+            3. Call get_hourly_profile to identify patterns
+            4. Assess the magnitude and significance of the surplus
+            5. Consider tariff implications (day vs night rates)
+
+            Provide a brief analysis focusing on:
+            - How much surplus energy is available
+            - How significant this surplus is compared to typical patterns
+            - How long this surplus might last based on hourly patterns
+
+            Keep your response concise and data-driven.
+            """,
+            ["get_current_power", "get_today_stats", "get_energy_stats", "get_hourly_profile"]),
+        new MonitoringSubAgentDefinition(
+            "appliance_advisor",
+            "Appliance Advisor",
+            "Recommends specific high-energy appliances to run based on available surplus and historical patterns.",
+            """
+            You are the Appliance Advisor agent. Your role is to recommend which appliances to run.
+
+            High-power appliances and their typical consumption:
+            - EV Charger: 7.4 kW
+            - Dryer: 3.0 kW
+            - Washing Machine: 2.0 kW
+            - Dishwasher: 1.8 kW
+
+            When asked for recommendations:
+            1. Call get_current_power to see available surplus
+            2. Call get_appliance_advice for 1-2 relevant appliances
+            3. Consider which appliances fit the available surplus
+            4. Prioritize appliances that match the surplus magnitude
+
+            Provide specific recommendations:
+            - Which 1-2 appliances should be run NOW
+            - Why those appliances are good matches for the current surplus
+
+            Be specific with appliance names. Keep response brief.
+            """,
+            ["get_current_power", "get_appliance_advice", "get_hourly_profile"]),
+        new MonitoringSubAgentDefinition(
+            "timing_optimizer",
+            "Timing Optimizer",
+            "Determines urgency and optimal timing windows based on weather forecasts and solar production predictions.",
+            """
+            You are the Timing Optimizer agent. Your role is to determine timing urgency.
+
+            When asked about timing:
+            1. Call get_current_weather to assess current solar conditions
+            2. Call get_solar_forecast to predict upcoming production
+            3. Determine how long the surplus will likely last
+            4. Assess urgency based on cloud cover and forecast trends
+
+            Provide timing guidance:
+            - How urgent is it to act NOW vs later
+            - How long the surplus window is likely to last
+            - Whether conditions will improve or worsen soon
+
+            Be specific with timing windows (e.g., "next 2 hours", "before 3pm").
+            """,
+            ["get_current_weather", "get_solar_forecast", "get_hourly_profile"])
+    ];
+
     private readonly ILogger<EnergyMonitoringAgentService> _logger;
     private readonly IEnergyStateService _energyState;
     private readonly INotificationService _notificationService;
     private readonly CopilotClient _copilotClient;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly EnergyMonitoringOptions _options;
-
-    private CopilotSession? _session;
+    private readonly string _model;
+    private readonly EnergyMonitoringStateEvaluator _stateEvaluator;
     private DateTime? _lastNotificationTime;
     private DateTime? _thresholdExceededSince;
-    private readonly SemaphoreSlim _sessionLock = new(1, 1);
 
     public EnergyMonitoringAgentService(
         ILogger<EnergyMonitoringAgentService> logger,
@@ -35,7 +107,8 @@ public class EnergyMonitoringAgentService : BackgroundService
         INotificationService notificationService,
         CopilotClient copilotClient,
         IServiceScopeFactory scopeFactory,
-        IOptions<EnergyMonitoringOptions> options)
+        IOptions<EnergyMonitoringOptions> options,
+        IOptions<AgentOptions> agentOptions)
     {
         _logger = logger;
         _energyState = energyState;
@@ -43,6 +116,8 @@ public class EnergyMonitoringAgentService : BackgroundService
         _copilotClient = copilotClient;
         _scopeFactory = scopeFactory;
         _options = options.Value;
+        _model = agentOptions.Value.Model;
+        _stateEvaluator = new EnergyMonitoringStateEvaluator(_options);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -75,90 +150,69 @@ public class EnergyMonitoringAgentService : BackgroundService
     private async Task MonitorEnergyAsync(CancellationToken cancellationToken)
     {
         var telegram = _energyState.CurrentTelegram;
-        if (telegram == null)
+        var previousThresholdExceededSince = _thresholdExceededSince;
+        var now = DateTime.UtcNow;
+        var evaluation = _stateEvaluator.Evaluate(telegram, now, _thresholdExceededSince, _lastNotificationTime);
+        _thresholdExceededSince = evaluation.ThresholdExceededSince;
+
+        if (!evaluation.HasTelegram)
         {
             _logger.LogDebug("No current telegram data available");
             return;
         }
 
-        var netPower = telegram.NetPower;
-        var isProducing = telegram.IsProducing;
-        var exceedsThreshold = isProducing && netPower >= _options.EnergyThresholdKw;
-
-        if (exceedsThreshold)
+        if (!evaluation.ExceedsThreshold)
         {
-            // Track how long the threshold has been exceeded
-            if (_thresholdExceededSince == null)
-            {
-                _thresholdExceededSince = DateTime.UtcNow;
-                _logger.LogDebug(
-                    "Energy threshold exceeded: {NetPower} kW (threshold: {Threshold} kW). Starting timer.",
-                    netPower,
-                    _options.EnergyThresholdKw);
-            }
-            else
-            {
-                var exceededDuration = DateTime.UtcNow - _thresholdExceededSince.Value;
-                var requiredDuration = TimeSpan.FromMinutes(_options.ThresholdDurationMinutes);
-
-                if (exceededDuration >= requiredDuration)
-                {
-                    // Check cooldown period
-                    var cooldownPeriod = TimeSpan.FromMinutes(_options.NotificationCooldownMinutes);
-                    var timeSinceLastNotification = _lastNotificationTime.HasValue
-                        ? DateTime.UtcNow - _lastNotificationTime.Value
-                        : TimeSpan.MaxValue;
-
-                    if (timeSinceLastNotification >= cooldownPeriod)
-                    {
-                        _logger.LogInformation(
-                            "Sustained energy surplus detected: {NetPower} kW for {Duration} minutes. Generating notification.",
-                            netPower,
-                            exceededDuration.TotalMinutes);
-
-                        await GenerateAndSendNotificationAsync(netPower, cancellationToken);
-                        _lastNotificationTime = DateTime.UtcNow;
-                        _thresholdExceededSince = null; // Reset the timer
-                    }
-                    else
-                    {
-                        _logger.LogDebug(
-                            "Cooldown active. Next notification possible in {Minutes} minutes.",
-                            (cooldownPeriod - timeSinceLastNotification).TotalMinutes);
-                    }
-                }
-                else
-                {
-                    _logger.LogDebug(
-                        "Threshold exceeded for {Current} min, need {Required} min",
-                        exceededDuration.TotalMinutes,
-                        requiredDuration.TotalMinutes);
-                }
-            }
-        }
-        else
-        {
-            // Reset if threshold is no longer exceeded
-            if (_thresholdExceededSince != null)
+            if (previousThresholdExceededSince != null)
             {
                 _logger.LogDebug("Energy surplus dropped below threshold. Resetting timer.");
-                _thresholdExceededSince = null;
             }
+
+            return;
         }
+
+        if (previousThresholdExceededSince == null && _thresholdExceededSince != null)
+        {
+            _logger.LogDebug(
+                "Energy threshold exceeded: {NetPower} kW (threshold: {Threshold} kW). Starting timer.",
+                telegram!.NetPower,
+                _options.EnergyThresholdKw);
+            return;
+        }
+
+        if (!evaluation.RequiredDurationMet)
+        {
+            _logger.LogDebug(
+                "Threshold exceeded for {Current} min, need {Required} min",
+                evaluation.ExceededDuration.TotalMinutes,
+                evaluation.RequiredDuration.TotalMinutes);
+            return;
+        }
+
+        if (!evaluation.CooldownElapsed)
+        {
+            _logger.LogDebug(
+                "Cooldown active. Next notification possible in {Minutes} minutes.",
+                evaluation.CooldownRemaining.TotalMinutes);
+            return;
+        }
+
+        _logger.LogInformation(
+            "Sustained energy surplus detected: {NetPower} kW for {Duration} minutes. Generating notification.",
+            telegram!.NetPower,
+            evaluation.ExceededDuration.TotalMinutes);
+
+        await GenerateAndSendNotificationAsync(telegram.NetPower, cancellationToken);
+        _lastNotificationTime = now;
     }
 
     private async Task GenerateAndSendNotificationAsync(decimal energySurplusKw, CancellationToken cancellationToken)
     {
         try
         {
-            var session = await GetOrCreateSessionAsync(cancellationToken);
-            if (session == null)
-            {
-                _logger.LogWarning("Failed to create Copilot session for notification generation");
-                return;
-            }
-
-
+            var enabledSubAgents = GetEnabledSubAgentDefinitions();
+            await using var sessionContext = await CreateSessionContextAsync(enabledSubAgents, cancellationToken);
+            var session = sessionContext.Session;
             var prompt = $$"""
                 URGENT ENERGY SURPLUS DETECTED
 
@@ -166,13 +220,7 @@ public class EnergyMonitoringAgentService : BackgroundService
                 - Net power production: {{energySurplusKw:F2}} kW
                 - This surplus has been sustained for {{_options.ThresholdDurationMinutes}} minutes
 
-                Please coordinate with your specialized agents to analyze this situation:
-
-                1. Ask the energy_analyzer agent to evaluate the current surplus situation
-                2. Ask the appliance_advisor agent to recommend 1-2 specific appliances
-                3. Ask the timing_optimizer agent to determine urgency and timing
-
-                Then synthesize their insights into ONE clear notification message.
+                {{BuildPromptInstructions(enabledSubAgents)}}
 
                 Return your response as JSON:
                 {
@@ -184,7 +232,7 @@ public class EnergyMonitoringAgentService : BackgroundService
             var agentContributions = new Dictionary<string, string>();
             var responseBuilder = new System.Text.StringBuilder();
 
-            session.On(evt =>
+            using var subscription = session.On<SessionEvent>(evt =>
             {
                 if (evt is AssistantMessageDeltaEvent delta && !string.IsNullOrEmpty(delta.Data?.DeltaContent))
                 {
@@ -273,183 +321,170 @@ public class EnergyMonitoringAgentService : BackgroundService
         };
     }
 
-    private async Task<CopilotSession?> GetOrCreateSessionAsync(CancellationToken cancellationToken)
+    private async Task<MonitoringSessionContext> CreateSessionContextAsync(
+        IReadOnlyList<MonitoringSubAgentDefinition> enabledSubAgents,
+        CancellationToken cancellationToken)
     {
-        await _sessionLock.WaitAsync(cancellationToken);
+        var scope = _scopeFactory.CreateAsyncScope();
         try
         {
-            if (_session != null)
-                return _session;
+            _logger.LogInformation("Creating Copilot session for energy monitoring agent (model: {Model})", _model);
 
-            _logger.LogInformation("Creating Copilot session for energy monitoring agent");
-
-            // Create scoped services for plugins
-            using var scope = _scopeFactory.CreateScope();
             var energyPlugin = scope.ServiceProvider.GetRequiredService<EnergyPlugin>();
             var weatherPlugin = scope.ServiceProvider.GetRequiredService<WeatherPlugin>();
-
             var tools = PowerPilotAgentFactory.BuildTools(energyPlugin, weatherPlugin);
-
-            _session = await _copilotClient.CreateSessionAsync(new SessionConfig
+            var session = await _copilotClient.CreateSessionAsync(new SessionConfig
             {
-                Model = "gpt-4.1",
+                Model = _model,
                 Streaming = true,
                 OnPermissionRequest = PermissionHandler.ApproveAll,
-                ExcludedTools= tools.Select(t=> t.Name).ToList(), // Exclude all tools from the main agent - they will be used by specialized agents
-                Tools= tools.ToList(),
-                Agent = "monitor", // Start with the orchestrator agent
-                CustomAgents = new List<CustomAgentConfig>
-                {
-                    new()
-                    {
-                        Name = "monitor",
-                        DisplayName = "Energy Monitor Orchestrator",
-                        Description = "Orchestrates multi-agent analysis to provide actionable energy insights. Delegates to specialized agents.",
-                        Prompt = """
-                        You are the PowerPilot Energy Monitor Orchestrator. You coordinate specialized agents to analyze energy situations.
-
-                        Available specialized agents:
-                        - **energy_analyzer**: Call this agent to evaluate current energy surplus, production/consumption patterns
-                        - **appliance_advisor**: Call this agent to get appliance recommendations based on current surplus
-                        - **timing_optimizer**: Call this agent to determine urgency and optimal timing windows
-
-                        When you receive an energy surplus alert:
-                        1. Delegate to energy_analyzer to assess the situation
-                        2. Delegate to appliance_advisor to get specific recommendations
-                        3. Delegate to timing_optimizer to determine urgency
-                        4. Synthesize their responses into ONE concise notification (2-3 sentences max)
-                        5. Return ONLY a JSON response in this format:
-                        {
-                            "message": "Your synthesized notification here",
-                            "severity": "info|success|warning|important"
-                        }
-
-                        Keep the final message actionable, specific, and concise.
-                        """
-                    },
-                    new()
-                    {
-                        Name = "energy_analyzer",
-                        DisplayName = "Energy Analyzer",
-                        Description = "Evaluates production/consumption patterns, identifies surplus magnitude and duration, assesses tariff implications.",
-                        Tools = new List<string> 
-                        { 
-                            "get_current_power", 
-                            "get_today_stats",
-                            "get_energy_stats",
-                            "get_hourly_profile"
-                        },
-                        Prompt = """
-                        You are the Energy Analyzer agent. Your role is to evaluate the current energy situation.
-
-                        When asked to analyze energy surplus:
-                        1. Call get_current_power to understand current net production
-                        2. Call get_today_stats to see daily context
-                        3. Call get_hourly_profile to identify patterns
-                        4. Assess the magnitude and significance of the surplus
-                        5. Consider tariff implications (day vs night rates)
-
-                        Provide a brief analysis focusing on:
-                        - How much surplus energy is available
-                        - How significant this surplus is compared to typical patterns
-                        - How long this surplus might last based on hourly patterns
-
-                        Keep your response concise and data-driven.
-                        """
-                    },
-                    new()
-                    {
-                        Name = "appliance_advisor",
-                        DisplayName = "Appliance Advisor",
-                        Description = "Recommends specific high-energy appliances to run based on available surplus and historical patterns.",
-                        Tools = new List<string> 
-                        { 
-                            "get_current_power",
-                            "get_appliance_advice",
-                            "get_hourly_profile"
-                        },
-                        Prompt = """
-                        You are the Appliance Advisor agent. Your role is to recommend which appliances to run.
-
-                        High-power appliances and their typical consumption:
-                        - EV Charger: 7.4 kW
-                        - Dryer: 3.0 kW  
-                        - Washing Machine: 2.0 kW
-                        - Dishwasher: 1.8 kW
-
-                        When asked for recommendations:
-                        1. Call get_current_power to see available surplus
-                        2. Call get_appliance_advice for 1-2 relevant appliances
-                        3. Consider which appliances fit the available surplus
-                        4. Prioritize appliances that match the surplus magnitude
-
-                        Provide specific recommendations:
-                        - Which 1-2 appliances should be run NOW
-                        - Why those appliances are good matches for the current surplus
-
-                        Be specific with appliance names. Keep response brief.
-                        """
-                    },
-                    new()
-                    {
-                        Name = "timing_optimizer",
-                        DisplayName = "Timing Optimizer",
-                        Description = "Determines urgency and optimal timing windows based on weather forecasts and solar production predictions.",
-                        Tools = new List<string> 
-                        { 
-                            "get_current_weather",
-                            "get_solar_forecast",
-                            "get_hourly_profile"
-                        },
-                        Prompt = """
-                        You are the Timing Optimizer agent. Your role is to determine timing urgency.
-
-                        When asked about timing:
-                        1. Call get_current_weather to assess current solar conditions
-                        2. Call get_solar_forecast to predict upcoming production
-                        3. Determine how long the surplus will likely last
-                        4. Assess urgency based on cloud cover and forecast trends
-
-                        Provide timing guidance:
-                        - How urgent is it to act NOW vs later
-                        - How long the surplus window is likely to last
-                        - Whether conditions will improve or worsen soon
-
-                        Be specific with timing windows (e.g., "next 2 hours", "before 3pm").
-                        """
-                    }
-                }
+                ExcludedTools = enabledSubAgents.Count > 0 ? tools.Select(t => t.Name).ToList() : null,
+                Tools = tools.ToList(),
+                Agent = "monitor",
+                CustomAgents = BuildCustomAgents(enabledSubAgents)
             }, cancellationToken);
 
-            return _session;
+            return new MonitoringSessionContext(scope, session);
         }
-        catch (Exception ex)
+        catch
         {
-            _logger.LogError(ex, "Failed to create Copilot session");
-            return null;
-        }
-        finally
-        {
-            _sessionLock.Release();
+            await scope.DisposeAsync();
+            throw;
         }
     }
 
-    public override async Task StopAsync(CancellationToken cancellationToken)
+    private List<CustomAgentConfig> BuildCustomAgents(IReadOnlyList<MonitoringSubAgentDefinition> enabledSubAgents)
+    {
+        var monitorPrompt = BuildMonitorPrompt(enabledSubAgents);
+        var customAgents = new List<CustomAgentConfig>
+        {
+            new()
+            {
+                Name = "monitor",
+                DisplayName = "Energy Monitor Orchestrator",
+                Description = "Orchestrates multi-agent analysis to provide actionable energy insights.",
+                Prompt = monitorPrompt
+            }
+        };
+
+        customAgents.AddRange(enabledSubAgents.Select(definition => new CustomAgentConfig
+        {
+            Name = definition.Name,
+            DisplayName = definition.DisplayName,
+            Description = definition.Description,
+            Tools = definition.Tools.ToList(),
+            Prompt = definition.Prompt
+        }));
+
+        return customAgents;
+    }
+
+    private IReadOnlyList<MonitoringSubAgentDefinition> GetEnabledSubAgentDefinitions()
+    {
+        foreach (var configuredAgent in _options.EnabledSubAgents.Keys)
+        {
+            if (!AvailableSubAgents.Any(agent => string.Equals(agent.Name, configuredAgent, StringComparison.Ordinal)))
+            {
+                _logger.LogWarning("Unknown monitoring sub-agent '{AgentName}' configured in EnergyMonitoring:EnabledSubAgents", configuredAgent);
+            }
+        }
+
+        return AvailableSubAgents
+            .Where(agent => !_options.EnabledSubAgents.TryGetValue(agent.Name, out var enabled) || enabled)
+            .ToList();
+    }
+
+    private static string BuildPromptInstructions(IReadOnlyList<MonitoringSubAgentDefinition> enabledSubAgents)
+    {
+        if (enabledSubAgents.Count == 0)
+        {
+            return "Analyze the situation directly using the available tools, then synthesize ONE clear notification message.";
+        }
+
+        var instructions = enabledSubAgents
+            .Select((agent, index) => $"{index + 1}. Ask the {agent.Name} agent to help analyze this situation")
+            .ToList();
+
+        instructions.Add($"{instructions.Count + 1}. Then synthesize their insights into ONE clear notification message.");
+        return "Please coordinate with your specialized agents to analyze this situation:\n\n" + string.Join("\n", instructions);
+    }
+
+    private static string BuildMonitorPrompt(IReadOnlyList<MonitoringSubAgentDefinition> enabledSubAgents)
+    {
+        if (enabledSubAgents.Count == 0)
+        {
+            return """
+                You are the PowerPilot Energy Monitor. Analyze energy surplus situations directly using the available tools.
+
+                When you receive an energy surplus alert:
+                1. Review the current power data and recent trends.
+                2. Determine whether action is urgent.
+                3. Recommend a concise, actionable next step.
+                4. Return ONLY a JSON response in this format:
+                {
+                    "message": "Your synthesized notification here",
+                    "severity": "info|success|warning|important"
+                }
+
+                Keep the final message actionable, specific, and concise.
+                """;
+        }
+
+        var availableAgents = string.Join(
+            Environment.NewLine,
+            enabledSubAgents.Select(agent => $"- **{agent.Name}**: {agent.Description}"));
+        var steps = string.Join(
+            Environment.NewLine,
+            enabledSubAgents.Select((agent, index) => $"{index + 1}. Delegate to {agent.Name}"));
+
+        return $$"""
+            You are the PowerPilot Energy Monitor Orchestrator. You coordinate specialized agents to analyze energy situations.
+
+            Available specialized agents:
+            {{availableAgents}}
+
+            When you receive an energy surplus alert:
+            {{steps}}
+            {{enabledSubAgents.Count + 1}}. Synthesize their responses into ONE concise notification (2-3 sentences max)
+            {{enabledSubAgents.Count + 2}}. Return ONLY a JSON response in this format:
+            {
+                "message": "Your synthesized notification here",
+                "severity": "info|success|warning|important"
+            }
+
+            Keep the final message actionable, specific, and concise.
+            """;
+    }
+
+    public override Task StopAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Energy Monitoring Agent stopping");
-
-        if (_session != null)
-        {
-            await _session.DisposeAsync();
-            _session = null;
-        }
-
-        await base.StopAsync(cancellationToken);
+        return base.StopAsync(cancellationToken);
     }
 
-    public override void Dispose()
+    private sealed record MonitoringSubAgentDefinition(
+        string Name,
+        string DisplayName,
+        string Description,
+        string Prompt,
+        IReadOnlyList<string> Tools);
+
+    private sealed class MonitoringSessionContext : IAsyncDisposable
     {
-        _sessionLock.Dispose();
-        base.Dispose();
+        private readonly AsyncServiceScope _scope;
+
+        public MonitoringSessionContext(AsyncServiceScope scope, CopilotSession session)
+        {
+            _scope = scope;
+            Session = session;
+        }
+
+        public CopilotSession Session { get; }
+
+        public async ValueTask DisposeAsync()
+        {
+            await Session.DisposeAsync();
+            await _scope.DisposeAsync();
+        }
     }
 }
