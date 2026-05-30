@@ -62,7 +62,8 @@ flowchart LR
   end
 
   subgraph Devices[Device Access]
-    P1Reader[SerialP1Reader]
+    SerialReader[SerialP1Reader]
+    HomeWizardReader[HomeWizardP1Reader]
     Parser[DsmrP1Parser]
   end
 
@@ -73,7 +74,8 @@ flowchart LR
   Web --> Chat
   Web --> Db
   Web --> Weather
-  Web --> P1Reader
+  Web --> SerialReader
+  Web --> HomeWizardReader
 
   Chat --> Factory
   Factory --> EnergyPlugin
@@ -82,8 +84,9 @@ flowchart LR
   EnergyPlugin --> State
   WeatherPlugin --> Weather
 
-  P1Reader --> Parser
+  SerialReader --> Parser
   Parser --> Core
+  HomeWizardReader --> Core
   Db --> Core
   Weather --> Core
   State --> Hub
@@ -104,9 +107,10 @@ flowchart LR
 - [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) or later
 - [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli) - Required for AI assistant features
 - A DSMR-compliant P1 smart meter (for production use) or use simulated mode
-  - Like the ones found here: https://www.fluvius.be/nl/meters-en-meterstanden/digitale-meter/hoe-werkt-mijn-digitale-meter/handleidingen-digitale-elektriciteitsmeters 
-- A connector cable to access the P1 port (e.g., USB to serial adapter)
+  - Like the ones found here: https://www.fluvius.be/nl/meters-en-meterstanden/digitale-meter/hoe-werkt-mijn-digitale-meter/handleidingen-digitale-elektriciteitsmeters
+- **Option A — Serial cable**: A connector cable to access the P1 port (e.g., USB to serial adapter)
   - Like this one: https://www.bol.com/be/nl/p/slimme-meter-kabel-p1-usb/9200000111535827/
+- **Option B — HomeWizard P1 Wi-Fi dongle**: A [HomeWizard Wi-Fi P1 meter](https://www.homewizard.com/p1-meter/) plugged into your smart meter's P1 port — no cable or serial driver needed
 - OpenWeatherMap API key (optional, for weather features)
 
 ### Verify GitHub Copilot CLI Installation
@@ -156,10 +160,15 @@ Create or edit `src/PowerPilot.Web/appsettings.Development.json`:
     "City": "Brussels",
     "Units": "metric"
   },
+  "MeterSource": "Choose: Simulated , Serial , HomeWizard",
   "P1Reader": {
+    "Mode": "Serial",
     "SerialPort": "COM3",
-    "BaudRate": 115200,
-    "UseSimulated": false
+    "BaudRate": 115200
+  },
+  "HomeWizard": {
+    "IpAddress": "192.168.1.100",
+    "PollingIntervalSeconds": 10
   },
   "ConnectionStrings": {
     "DefaultConnection": "Data Source=powerpilot.db"
@@ -211,17 +220,43 @@ Configure the AI agent in `appsettings.json`:
 
 ### P1 Smart Meter Configuration
 
+PowerPilot supports three reader modes, selected via `P1Reader:Mode`:
+
+| Mode | Description |
+|------|-------------|
+| `Serial` | Physical P1 serial cable connected to the smart meter |
+| `HomeWizard` | HomeWizard Wi-Fi P1 dongle, polled over HTTP |
+| _(anything else)_ | Simulated data — no hardware required |
+
+#### Serial mode
+
 ```json
 {
+  "MeterSource": "Serial",
   "P1Reader": {
     "SerialPort": "COM3",
-    "BaudRate": 115200,
-    "UseSimulated": false
+    "BaudRate": 115200
   }
 }
 ```
 
-Set `UseSimulated` to `true` for development/testing without a physical smart meter.
+#### HomeWizard mode
+
+```json
+{
+  "MeterSource": "HomeWizard",
+  "HomeWizard": {
+    "IpAddress": "192.168.1.100",
+    "PollingIntervalSeconds": 10
+  }
+}
+```
+
+Set the `IpAddress` to the local IP address of your HomeWizard P1 dongle. PowerPilot polls the HomeWizard local API (`/api/v1/data`) at the configured interval.
+
+#### Simulated mode
+
+Omit `Mode` (or set it to any unrecognised value) to use simulated data for development and testing — no physical meter required.
 
 ### Weather Service Configuration
 
@@ -283,7 +318,8 @@ PowerPilot/
 │   │   ├── Data/                     # EF Core DbContext
 │   │   └── Weather/                  # OpenWeatherMap integration
 │   ├── PowerPilot.P1Reader/
-│   │   ├── SerialP1Reader.cs         # Real P1 meter reader
+│   │   ├── HomeWizardP1Reader.cs     # HomeWizard Wi-Fi P1 dongle reader
+│   │   ├── SerialP1Reader.cs         # Serial cable P1 reader
 │   │   ├── SimulatedP1Reader.cs      # Simulated data for testing
 │   │   └── DsmrP1Parser.cs           # DSMR protocol parser
 │   └── PowerPilot.Web/
@@ -321,7 +357,17 @@ dotnet test
 
 ## P1 Smart Meter Protocol
 
-PowerPilot supports DSMR (Dutch Smart Meter Requirements) P1 telegrams, commonly used in Belgium and the Netherlands. The P1 port outputs data every 10 seconds via a serial connection (typically at 115200 baud, 8N1).
+PowerPilot supports two ways of reading your smart meter:
+
+### Serial (DSMR)
+
+Reads DSMR (Dutch Smart Meter Requirements) P1 telegrams directly over a serial connection. The P1 port outputs a telegram every 10 seconds (typically at 115200 baud, 8N1), which `DsmrP1Parser` decodes from raw text.
+
+### HomeWizard Wi-Fi P1
+
+Polls the HomeWizard local HTTP API (`http://<ip>/api/v1/data`) at a configurable interval (default 10 seconds). No serial driver or cable is required — the dongle connects to your home Wi-Fi and exposes the meter data as JSON.
+
+> **Note**: The HomeWizard v1 API does not include a per-tariff breakdown. Total import is mapped to Tariff 1; Tariff 2 is always zero.
 
 ### Supported Fields
 
@@ -365,6 +411,10 @@ sudo usermod -a -G dialout $USER
 Log out and back in for changes to take effect.
 
 On Windows, ensure no other application is using the COM port.
+
+### HomeWizard Device Not Responding
+
+Ensure the HomeWizard P1 dongle is on the same local network and that the local API is enabled in the HomeWizard app (**Settings → Meters → Enable API**). Verify connectivity by opening `http://<ip>/api/v1/data` in a browser — it should return a JSON response. If the IP address changes, consider assigning a static DHCP lease for the dongle in your router.
 
 ### Database Migration Issues
 

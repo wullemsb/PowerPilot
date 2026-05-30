@@ -19,6 +19,7 @@ builder.Services.AddRazorComponents()
 builder.Services.AddSignalR();
 
 builder.Services.Configure<P1ReaderOptions>(builder.Configuration.GetSection("P1Reader"));
+builder.Services.Configure<HomeWizardOptions>(builder.Configuration.GetSection("HomeWizard"));
 builder.Services.Configure<WeatherOptions>(builder.Configuration.GetSection("Weather"));
 builder.Services.Configure<AgentOptions>(builder.Configuration.GetSection("Agent"));
 builder.Services.Configure<EnergyMonitoringOptions>(builder.Configuration.GetSection("EnergyMonitoring"));
@@ -42,11 +43,13 @@ builder.Services.AddSingleton<IWeatherService>(sp =>
     return new OpenWeatherMapService(httpClient, options, logger);
 });
 
-var useSimulated = builder.Configuration.GetValue<bool>("P1Reader:UseSimulated", true);
-if (useSimulated)
-    builder.Services.AddSingleton<IP1Reader, SimulatedP1Reader>();
-else
-    builder.Services.AddSingleton<IP1Reader, SerialP1Reader>();
+var meterSource = builder.Configuration.GetValue<string>("MeterSource") ?? "Simulated";
+switch (meterSource)
+{
+    case "HomeWizard": builder.Services.AddSingleton<IP1Reader, HomeWizardP1Reader>(); break;
+    case "Serial":     builder.Services.AddSingleton<IP1Reader, SerialP1Reader>();     break;
+    default:           builder.Services.AddSingleton<IP1Reader, SimulatedP1Reader>(); break;
+}
 
 // GitHub Copilot SDK — one client per application lifetime
 builder.Services.AddSingleton(sp =>
