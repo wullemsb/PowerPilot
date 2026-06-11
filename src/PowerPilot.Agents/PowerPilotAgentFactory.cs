@@ -101,7 +101,7 @@ public static class PowerPilotAgentFactory
                     }),
             CopilotTool.DefineTool(()=> weatherPlugin.GetCurrentWeatherAsync(),toolOptions, new AIFunctionFactoryOptions()
                     {
-                        Name = "get_weather_forecast",
+                        Name = "get_current_weather",
                         Description= "Get current weather including temperature, cloud cover, and estimated solar irradiance"
                     }),
             CopilotTool.DefineTool(()=> weatherPlugin.GetSolarForecastAsync(),toolOptions, new AIFunctionFactoryOptions()
