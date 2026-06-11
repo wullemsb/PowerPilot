@@ -153,8 +153,7 @@ Create or edit `src/PowerPilot.Web/appsettings.Development.json`:
     "GitHubToken": "your-github-token-here",
     "Model": "gpt-4.1",
     "CliPath": null,
-    "CliUrl": null,
-    "EnablePersistentSession": false
+    "CliUrl": null
   },
   "Weather": {
     "ApiKey": "your-api-key-here",
@@ -209,8 +208,7 @@ Configure the AI agent in `appsettings.json`:
     "GitHubToken": "ghp_your_token_here",
     "Model": "gpt-4.1",
     "CliPath": null,
-    "CliUrl": null,
-    "EnablePersistentSession": false
+    "CliUrl": null
   }
 }
 ```
@@ -219,7 +217,6 @@ Configure the AI agent in `appsettings.json`:
 - **Model**: GitHub Copilot model to use for both interactive chat and background monitoring (e.g., `gpt-4.1`, `claude-sonnet-4.5`)
 - **CliPath**: Optional custom path to Copilot CLI binary
 - **CliUrl**: Optional URL for remote Copilot CLI service
-- **EnablePersistentSession**: Resume the most recent Copilot SDK chat session on restart and keep chat context across restarts
 
 ### P1 Smart Meter Configuration
 

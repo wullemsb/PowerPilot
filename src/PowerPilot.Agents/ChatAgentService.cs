@@ -25,12 +25,6 @@ public class AgentOptions
     /// See <c>CopilotClient.ListModelsAsync()</c> for available models.
     /// </summary>
     public string Model { get; set; } = "gpt-4.1";
-
-    /// <summary>
-    /// When enabled, chat resumes the most recent SDK session and preserves history
-    /// across app restarts by using Copilot SDK session persistence.
-    /// </summary>
-    public bool EnablePersistentSession { get; set; }
 }
 
 /// <summary>
@@ -55,7 +49,6 @@ public sealed class ChatAgentService : IAsyncDisposable
     private readonly CopilotClient _client;
     private readonly IReadOnlyList<AIFunctionDeclaration> _tools;
     private readonly string _model;
-    private readonly bool _enablePersistentSession;
 
     private CopilotSession? _session;
     private readonly SemaphoreSlim _sessionLock = new(1, 1);
@@ -70,7 +63,6 @@ public sealed class ChatAgentService : IAsyncDisposable
         _logger = logger;
         _client = client;
         _model = options.Value.Model;
-        _enablePersistentSession = options.Value.EnablePersistentSession;
         _tools = PowerPilotAgentFactory.BuildTools(energyPlugin, weatherPlugin);
     }
 
@@ -148,10 +140,9 @@ public sealed class ChatAgentService : IAsyncDisposable
 
     /// <summary>
     /// Discards the current session so the next call to <see cref="ChatAsync"/>
-    /// starts a fresh conversation. If persistent sessions are enabled, the
-    /// stored session is deleted from disk as well.
+    /// starts a fresh conversation.
     /// </summary>
-    public Task ClearHistoryAsync() => ClearHistoryCoreAsync();
+    public void ClearHistory() => _ = ClearHistoryAsync();
 
     // -------------------------------------------------------------------------
     // Helpers
@@ -165,28 +156,20 @@ public sealed class ChatAgentService : IAsyncDisposable
             if (_session != null)
                 return _session;
 
-            if (_enablePersistentSession)
-            {
-                var lastSessionId = await _client.GetLastSessionIdAsync(ct);
-                if (!string.IsNullOrWhiteSpace(lastSessionId))
-                {
-                    _logger.LogInformation("Resuming GitHub Copilot session {SessionId}", lastSessionId);
-                    try
-                    {
-                        _session = await _client.ResumeSessionAsync(lastSessionId, BuildResumeSessionConfig(), ct);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to resume session {SessionId}; creating a new session instead", lastSessionId);
-                    }
-                }
-            }
+            _logger.LogInformation("Creating new GitHub Copilot session (model: {Model})", _model);
 
-            if (_session == null)
+            _session = await _client.CreateSessionAsync(new SessionConfig
             {
-                _logger.LogInformation("Creating new GitHub Copilot session (model: {Model})", _model);
-                _session = await _client.CreateSessionAsync(BuildSessionConfig(), ct);
-            }
+                Model = _model,
+                Streaming = true,
+                OnPermissionRequest = PermissionHandler.ApproveAll,
+                Tools = _tools.ToList(),
+                SystemMessage = new SystemMessageConfig
+                {
+                    Mode = SystemMessageMode.Append,
+                    Content = SystemPrompt,
+                },
+            }, ct);
 
             return _session;
         }
@@ -196,26 +179,15 @@ public sealed class ChatAgentService : IAsyncDisposable
         }
     }
 
-    private async Task ClearHistoryCoreAsync()
+    private async Task ClearHistoryAsync()
     {
         await _sessionLock.WaitAsync();
         try
         {
-            var sessionId = _session?.SessionId;
-
             if (_session != null)
             {
                 await _session.DisposeAsync();
                 _session = null;
-            }
-
-            if (_enablePersistentSession)
-            {
-                if (string.IsNullOrWhiteSpace(sessionId))
-                    sessionId = await _client.GetLastSessionIdAsync();
-
-                if (!string.IsNullOrWhiteSpace(sessionId))
-                    await _client.DeleteSessionAsync(sessionId);
             }
         }
         finally
@@ -223,34 +195,6 @@ public sealed class ChatAgentService : IAsyncDisposable
             _sessionLock.Release();
         }
     }
-
-    private SessionConfig BuildSessionConfig() =>
-        new()
-        {
-            Model = _model,
-            Streaming = true,
-            OnPermissionRequest = PermissionHandler.ApproveAll,
-            Tools = _tools.ToList(),
-            SystemMessage = new SystemMessageConfig
-            {
-                Mode = SystemMessageMode.Append,
-                Content = SystemPrompt,
-            },
-        };
-
-    private ResumeSessionConfig BuildResumeSessionConfig() =>
-        new()
-        {
-            Model = _model,
-            Streaming = true,
-            OnPermissionRequest = PermissionHandler.ApproveAll,
-            Tools = _tools.ToList(),
-            SystemMessage = new SystemMessageConfig
-            {
-                Mode = SystemMessageMode.Append,
-                Content = SystemPrompt,
-            },
-        };
 
     private static string BuildUnavailableMessage() =>
         "GitHub Copilot is not available. Please ensure:\n" +
@@ -267,3 +211,4 @@ public sealed class ChatAgentService : IAsyncDisposable
         _sessionLock.Dispose();
     }
 }
+

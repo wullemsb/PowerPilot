@@ -112,12 +112,7 @@
 
     private async Task OnKeyDown(KeyboardEventArgs e) { if (e.Key == "Enter" && !e.ShiftKey) await SendMessage(); }
 
-    private async Task ClearChat()
-    {
-        messages.Clear();
-        await AgentService.ClearHistoryAsync();
-        StateHasChanged();
-    }
+    private void ClearChat() { messages.Clear(); AgentService.ClearHistory(); StateHasChanged(); }
 
     private static string FormatMessage(string content) =>
         System.Net.WebUtility.HtmlEncode(content).Replace("\n", "<br/>");
