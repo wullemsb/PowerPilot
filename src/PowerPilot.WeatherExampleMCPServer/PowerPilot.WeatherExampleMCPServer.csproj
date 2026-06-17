@@ -20,4 +20,9 @@
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="1.2.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\PowerPilot.Core\PowerPilot.Core.csproj" />
+    <ProjectReference Include="..\PowerPilot.Infrastructure\PowerPilot.Infrastructure.csproj" />
+  </ItemGroup>
+
 </Project>

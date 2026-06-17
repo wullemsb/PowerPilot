@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PowerPilot.Web\PowerPilot.Web.csproj" />
+    <ProjectReference Include="..\PowerPilot.WeatherExampleMCPServer\PowerPilot.WeatherExampleMCPServer.csproj" />
   </ItemGroup>
 
 </Project>

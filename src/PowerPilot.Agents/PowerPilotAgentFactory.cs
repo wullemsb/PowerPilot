@@ -99,12 +99,14 @@ public static class PowerPilotAgentFactory
                         Name = "get_appliance_advice",
                         Description= "Get advice on the best time to run a high-power appliance based on current and historical production data"
                     }),
-            CopilotTool.DefineTool(()=> weatherPlugin.GetCurrentWeatherAsync(),toolOptions, new AIFunctionFactoryOptions()
+                CopilotTool.DefineTool(([Description("Optional location, e.g. Brussels or Amsterdam")] string? location = null)
+                    => weatherPlugin.GetCurrentWeatherAsync(location),toolOptions, new AIFunctionFactoryOptions()
                     {
                         Name = "get_current_weather",
                         Description= "Get current weather including temperature, cloud cover, and estimated solar irradiance"
                     }),
-            CopilotTool.DefineTool(()=> weatherPlugin.GetSolarForecastAsync(),toolOptions, new AIFunctionFactoryOptions()
+                CopilotTool.DefineTool(([Description("Optional location, e.g. Brussels or Amsterdam")] string? location = null)
+                    => weatherPlugin.GetSolarForecastAsync(location),toolOptions, new AIFunctionFactoryOptions()
                     {
                         Name = "get_solar_forecast",
                         Description= "Get the solar production forecast for the next 24 hours based on weather data" 

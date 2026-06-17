@@ -22,53 +22,64 @@ public class OpenWeatherMapService : IWeatherService
         _logger = logger;
     }
 
-    public async Task<WeatherData?> GetCurrentWeatherAsync(CancellationToken cancellationToken = default)
+    public async Task<WeatherData?> GetCurrentWeatherAsync(string? location = null, CancellationToken cancellationToken = default)
     {
-        if (_cachedWeather != null && (DateTime.UtcNow - _lastFetch).TotalMinutes < 15)
+        var effectiveLocation = string.IsNullOrWhiteSpace(location) ? _options.City : location.Trim();
+        var useConfiguredLocation = string.IsNullOrWhiteSpace(location);
+
+        if (useConfiguredLocation && _cachedWeather != null && (DateTime.UtcNow - _lastFetch).TotalMinutes < 15)
             return _cachedWeather;
 
         if (string.IsNullOrEmpty(_options.ApiKey))
         {
             _logger.LogWarning("OpenWeatherMap API key not configured. Using mock weather data.");
-            return GetMockWeather();
+            return GetMockWeather(effectiveLocation);
         }
 
         try
         {
-            var url = $"https://api.openweathermap.org/data/2.5/weather?q={Uri.EscapeDataString(_options.City)}&appid={_options.ApiKey}&units={_options.Units}";
+            var url = $"https://api.openweathermap.org/data/2.5/weather?q={Uri.EscapeDataString(effectiveLocation)}&appid={_options.ApiKey}&units={_options.Units}";
             var response = await _httpClient.GetStringAsync(url, cancellationToken);
             var data = JsonSerializer.Deserialize<OWMCurrentResponse>(response);
             if (data == null) return null;
 
-            _cachedWeather = new WeatherData
+            var weatherData = new WeatherData
             {
                 Timestamp = DateTime.UtcNow,
                 Description = data.Weather?.FirstOrDefault()?.Description ?? "Unknown",
                 TemperatureCelsius = data.Main?.Temp ?? 0,
                 CloudCoverPercent = data.Clouds?.All ?? 0,
                 WindSpeedMs = data.Wind?.Speed ?? 0,
-                City = _options.City
+                City = effectiveLocation
             };
-            _lastFetch = DateTime.UtcNow;
-            return _cachedWeather;
+
+            if (useConfiguredLocation)
+            {
+                _cachedWeather = weatherData;
+                _lastFetch = DateTime.UtcNow;
+            }
+
+            return weatherData;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to fetch weather data");
-            return GetMockWeather();
+            return GetMockWeather(effectiveLocation);
         }
     }
 
-    public async Task<IEnumerable<WeatherData>> GetForecastAsync(int hours = 24, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<WeatherData>> GetForecastAsync(int hours = 24, string? location = null, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(_options.ApiKey)) return GetMockForecast(hours);
+        var effectiveLocation = string.IsNullOrWhiteSpace(location) ? _options.City : location.Trim();
+
+        if (string.IsNullOrEmpty(_options.ApiKey)) return GetMockForecast(hours, effectiveLocation);
         try
         {
             var cnt = Math.Min(hours / 3 + 1, 40);
-            var url = $"https://api.openweathermap.org/data/2.5/forecast?q={Uri.EscapeDataString(_options.City)}&appid={_options.ApiKey}&units={_options.Units}&cnt={cnt}";
+            var url = $"https://api.openweathermap.org/data/2.5/forecast?q={Uri.EscapeDataString(effectiveLocation)}&appid={_options.ApiKey}&units={_options.Units}&cnt={cnt}";
             var response = await _httpClient.GetStringAsync(url, cancellationToken);
             var data = JsonSerializer.Deserialize<OWMForecastResponse>(response);
-            if (data?.List == null) return GetMockForecast(hours);
+            if (data?.List == null) return GetMockForecast(hours, effectiveLocation);
             return data.List.Select(item => new WeatherData
             {
                 Timestamp = DateTimeOffset.FromUnixTimeSeconds(item.Dt).UtcDateTime,
@@ -76,23 +87,23 @@ public class OpenWeatherMapService : IWeatherService
                 TemperatureCelsius = item.Main?.Temp ?? 0,
                 CloudCoverPercent = item.Clouds?.All ?? 0,
                 WindSpeedMs = item.Wind?.Speed ?? 0,
-                City = _options.City
+                City = effectiveLocation
             }).Take(hours / 3);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to fetch forecast data");
-            return GetMockForecast(hours);
+            return GetMockForecast(hours, effectiveLocation);
         }
     }
 
-    private static WeatherData GetMockWeather() => new()
+    private static WeatherData GetMockWeather(string city) => new()
     {
         Timestamp = DateTime.UtcNow, Description = "Partly cloudy",
-        TemperatureCelsius = 15, CloudCoverPercent = 40, WindSpeedMs = 3.5, City = "Mock City"
+        TemperatureCelsius = 15, CloudCoverPercent = 40, WindSpeedMs = 3.5, City = city
     };
 
-    private static IEnumerable<WeatherData> GetMockForecast(int hours)
+    private static IEnumerable<WeatherData> GetMockForecast(int hours, string city)
     {
         var rng = new Random();
         return Enumerable.Range(0, hours / 3).Select(i => new WeatherData
@@ -102,7 +113,7 @@ public class OpenWeatherMapService : IWeatherService
             TemperatureCelsius = 15 + rng.NextDouble() * 5,
             CloudCoverPercent = 20 + rng.NextDouble() * 60,
             WindSpeedMs = 2 + rng.NextDouble() * 5,
-            City = "Mock City"
+            City = city
         });
     }
 
