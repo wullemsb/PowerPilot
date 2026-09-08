@@ -107,3 +107,28 @@ h1:focus {
 .btn-send { padding: 0.75rem 1.5rem; background: #0066cc; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; align-self: flex-end; }
 .btn-send:hover:not(:disabled) { background: #0052a3; }
 .btn-send:disabled { opacity: 0.6; cursor: not-allowed; }
+.onboarding-container { max-width: 760px; margin: 0 auto; padding: 2rem 1rem 4rem; }
+.onboarding-header { margin-bottom: 2rem; }
+.onboarding-header h1 { max-width: 580px; margin: 0.35rem 0 0.75rem; color: #1a1a2e; font-size: 2.2rem; }
+.onboarding-header p, .onboarding-panel p { color: #6c757d; }
+.eyebrow, .step-label { color: #0066cc; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; }
+.onboarding-progress { display: flex; gap: 0.4rem; margin-bottom: 1rem; }
+.progress-step { height: 0.3rem; flex: 1; background: #dee2e6; border-radius: 0.2rem; }
+.progress-step.active { background: #0066cc; }
+.onboarding-panel { background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 2rem; }
+.onboarding-panel h2 { margin: 0.35rem 0 0.5rem; color: #1a1a2e; }
+.field-label { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 1.25rem; color: #343a40; font-weight: 600; }
+.field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.choice-row, .goal-choice { display: flex; align-items: center; gap: 0.75rem; cursor: pointer; }
+.choice-row { margin-top: 1.5rem; font-weight: 600; }
+.goal-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; margin-top: 1.5rem; }
+.goal-choice { padding: 1rem; border: 1px solid #ced4da; border-radius: 8px; font-weight: 600; }
+.goal-choice:has(input:checked) { border-color: #0066cc; background: #eef6ff; }
+.onboarding-actions { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-top: 2rem; }
+.btn-primary, .btn-link { border: 0; border-radius: 8px; padding: 0.7rem 1.25rem; cursor: pointer; font-weight: 600; }
+.btn-primary { background: #0066cc; color: white; }
+.btn-primary:hover:not(:disabled) { background: #0052a3; }
+.btn-link { background: transparent; color: #0066cc; }
+.btn-link:disabled, .btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+.validation-summary { margin-top: 1.5rem; padding: 0.75rem 1rem; border-left: 4px solid #dc3545; background: #fff1f2; color: #842029; }
+@media (max-width: 600px) { .onboarding-panel { padding: 1.25rem; } .field-grid, .goal-grid { grid-template-columns: 1fr; } .onboarding-header h1 { font-size: 1.8rem; } }

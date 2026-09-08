@@ -99,8 +99,8 @@ public class OpenWeatherMapService : IWeatherService
 
     private static WeatherData GetMockWeather(string city) => new()
     {
-        Timestamp = DateTime.UtcNow, Description = "Partly cloudy",
-        TemperatureCelsius = 15, CloudCoverPercent = 40, WindSpeedMs = 3.5, City = city
+        Timestamp = DateTime.UtcNow, Description = "Very sunny",
+        TemperatureCelsius = 32, CloudCoverPercent = 5, WindSpeedMs = 3.5, City = city
     };
 
     private static IEnumerable<WeatherData> GetMockForecast(int hours, string city)

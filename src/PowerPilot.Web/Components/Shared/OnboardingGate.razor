@@ -1,0 +1,21 @@
+@using PowerPilot.Core.Interfaces
+@inject IOnboardingRepository OnboardingRepository
+@inject NavigationManager Navigation
+
+@code {
+    private bool checkedProfile;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || checkedProfile)
+            return;
+
+        checkedProfile = true;
+        if (Navigation.Uri.Contains("/onboarding", StringComparison.OrdinalIgnoreCase) ||
+            Navigation.Uri.Contains("/Error", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (!await OnboardingRepository.IsCompletedAsync())
+            Navigation.NavigateTo("/onboarding");
+    }
+}

@@ -1,0 +1,196 @@
+@page "/onboarding"
+@rendermode InteractiveServer
+@using PowerPilot.Core.Models
+@inject PowerPilot.Web.Services.OnboardingService OnboardingService
+@inject NavigationManager Navigation
+
+<PageTitle>Set Up PowerPilot</PageTitle>
+
+<div class="onboarding-container">
+    <div class="onboarding-header">
+        <span class="eyebrow">POWERPILOT SETUP</span>
+        <h1>Make your energy data personal</h1>
+        <p>Answer a few questions so PowerPilot can understand your home and tailor future advice.</p>
+    </div>
+
+    <div class="onboarding-progress" aria-label="Onboarding progress">
+        @for (var index = 0; index < StepCount; index++)
+        {
+            <span class="progress-step @(index <= currentStep ? "active" : string.Empty)"></span>
+        }
+    </div>
+
+    @if (isLoading)
+    {
+        <p>Loading your setup...</p>
+    }
+    else
+    {
+        <div class="onboarding-panel">
+            @if (currentStep == 0)
+            {
+                <section>
+                    <span class="step-label">01 / 04</span>
+                    <h2>Tell us about solar</h2>
+                    <p>Knowing whether you generate energy helps us explain your power balance.</p>
+                    <label class="choice-row">
+                        <input type="checkbox" @bind="profile.HasSolarPanels" />
+                        <span>I have solar panels</span>
+                    </label>
+                    @if (profile.HasSolarPanels)
+                    {
+                        <label class="field-label">
+                            Solar capacity (kW)
+                            <input class="form-control" type="number" min="0.1" step="0.1" @bind="profile.SolarCapacityKw" />
+                        </label>
+                    }
+                </section>
+            }
+            else if (currentStep == 1)
+            {
+                <section>
+                    <span class="step-label">02 / 04</span>
+                    <h2>How are you billed?</h2>
+                    <p>This gives future cost estimates the right context.</p>
+                    <label class="field-label">
+                        Tariff type
+                        <select class="form-select" @bind="profile.TariffType">
+                            <option value="">Choose a tariff</option>
+                            <option value="Single">Single tariff</option>
+                            <option value="DayNight">Day and night tariff</option>
+                            <option value="Dynamic">Dynamic tariff</option>
+                        </select>
+                    </label>
+                    <div class="field-grid">
+                        <label class="field-label">
+                            Electricity rate (optional, €/kWh)
+                            <input class="form-control" type="number" min="0" step="0.001" @bind="profile.ElectricityRate" />
+                        </label>
+                        <label class="field-label">
+                            Feed-in rate (optional, €/kWh)
+                            <input class="form-control" type="number" min="0" step="0.001" @bind="profile.FeedInRate" />
+                        </label>
+                    </div>
+                </section>
+            }
+            else if (currentStep == 2)
+            {
+                <section>
+                    <span class="step-label">03 / 04</span>
+                    <h2>Describe your household</h2>
+                    <p>Usage patterns make more sense when we know who is home.</p>
+                    <div class="field-grid">
+                        <label class="field-label">
+                            People in the household
+                            <input class="form-control" type="number" min="1" @bind="profile.HouseholdSize" />
+                        </label>
+                        <label class="field-label">
+                            Home type
+                            <select class="form-select" @bind="profile.HomeType">
+                                <option value="">Choose a home type</option>
+                                <option value="Apartment">Apartment</option>
+                                <option value="Terraced">Terraced house</option>
+                                <option value="Detached">Detached house</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </label>
+                    </div>
+                    <label class="field-label">
+                        Major appliances or systems (optional)
+                        <input class="form-control" @bind="profile.MajorAppliances" placeholder="Heat pump, EV, electric boiler..." />
+                    </label>
+                </section>
+            }
+            else
+            {
+                <section>
+                    <span class="step-label">04 / 04</span>
+                    <h2>What should PowerPilot help with?</h2>
+                    <p>Choose the goals that matter most to you.</p>
+                    <div class="goal-grid">
+                        @foreach (var goal in goals)
+                        {
+                            <label class="goal-choice">
+                                <input type="checkbox" checked="@IsGoalSelected(goal)" @onchange="() => ToggleGoal(goal)" />
+                                <span>@goal</span>
+                            </label>
+                        }
+                    </div>
+                </section>
+            }
+
+            @if (errors.Count > 0)
+            {
+                <div class="validation-summary" role="alert">
+                    @foreach (var error in errors)
+                    {
+                        <div>@error</div>
+                    }
+                </div>
+            }
+
+            <div class="onboarding-actions">
+                <button class="btn-link" @onclick="PreviousStep" disabled="@(currentStep == 0)">Back</button>
+                @if (currentStep < StepCount - 1)
+                {
+                    <button class="btn-primary" @onclick="NextStep">Continue</button>
+                }
+                else
+                {
+                    <button class="btn-primary" @onclick="CompleteAsync" disabled="@isSaving">@(isSaving ? "Saving..." : "Finish setup")</button>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private const int StepCount = 4;
+    private readonly string[] goals = ["Lower my energy bill", "Use more of my solar energy", "Reduce peak consumption", "Understand my energy usage"];
+    private OnboardingProfile profile = new() { HouseholdSize = 1 };
+    private List<string> errors = [];
+    private int currentStep;
+    private bool isLoading = true;
+    private bool isSaving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        profile = await OnboardingService.GetProfileAsync() ?? new OnboardingProfile { HouseholdSize = 1 };
+        isLoading = false;
+    }
+
+    private void NextStep()
+    {
+        errors.Clear();
+        if (currentStep < StepCount - 1)
+            currentStep++;
+    }
+
+    private void PreviousStep()
+    {
+        errors.Clear();
+        if (currentStep > 0)
+            currentStep--;
+    }
+
+    private bool IsGoalSelected(string goal) => profile.Goals.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Contains(goal);
+
+    private void ToggleGoal(string goal)
+    {
+        var selected = profile.Goals.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet();
+        if (!selected.Add(goal))
+            selected.Remove(goal);
+        profile.Goals = string.Join(", ", selected);
+    }
+
+    private async Task CompleteAsync()
+    {
+        errors = OnboardingService.Validate(profile).ToList();
+        if (errors.Count > 0)
+            return;
+
+        isSaving = true;
+        await OnboardingService.SaveAsync(profile);
+        Navigation.NavigateTo("/");
+    }
+}

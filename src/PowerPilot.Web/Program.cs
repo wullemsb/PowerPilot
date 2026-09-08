@@ -33,6 +33,8 @@ builder.Services.AddSingleton<IEnergyStateService>(sp => sp.GetRequiredService<E
 builder.Services.AddSingleton<NotificationService>();
 builder.Services.AddSingleton<INotificationService>(sp => sp.GetRequiredService<NotificationService>());
 builder.Services.AddScoped<IEnergyRepository, EnergyRepository>();
+builder.Services.AddScoped<IOnboardingRepository, OnboardingRepository>();
+builder.Services.AddScoped<OnboardingService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<IWeatherService>(sp =>

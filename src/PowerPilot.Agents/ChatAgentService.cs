@@ -163,7 +163,15 @@ public sealed class ChatAgentService : IAsyncDisposable
                 Model = _model,
                 Streaming = true,
                 OnPermissionRequest = PermissionHandler.ApproveAll,
-                Tools = _tools.ToList(),
+                //Tools = new List<AIFunctionDeclaration>(_tools.ToList()) {AIFunctionDeclaration. },
+                McpServers = new Dictionary<string, McpServerConfig>
+                {
+                    ["weather-mcp"] = new McpHttpServerConfig
+                    {
+                        Url = Environment.GetEnvironmentVariable("POWERPILOT_WEATHER_MCP_HTTP"),
+                        Tools= ["*"]
+                    },
+                },
                 SystemMessage = new SystemMessageConfig
                 {
                     Mode = SystemMessageMode.Append,

@@ -109,7 +109,7 @@ public static class PowerPilotAgentFactory
                     => weatherPlugin.GetSolarForecastAsync(location),toolOptions, new AIFunctionFactoryOptions()
                     {
                         Name = "get_solar_forecast",
-                        Description= "Get the solar production forecast for the next 24 hours based on weather data" 
+                        Description= "Get the solar production forecast for the next 24 hours based on weather data"
                     })
         }.AsReadOnly();
     }
