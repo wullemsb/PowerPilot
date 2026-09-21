@@ -430,3 +430,4 @@ FodyWeavers.xsd
 /src/PowerPilot.Web/powerpilot.db-shm
 /src/PowerPilot.Web/powerpilot.db
 /src/PowerPilot.Web/powerpilot.db-wal
+/src/PowerPilot.Web/dataprotection-keys/

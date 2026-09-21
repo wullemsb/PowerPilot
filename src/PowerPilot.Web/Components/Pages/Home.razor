@@ -20,23 +20,51 @@
     @if (EnergyState.CurrentTelegram != null)
     {
         var t = EnergyState.CurrentTelegram;
+        var flow = GetFlowShares(t);
+        <div class="flow-bar">
+            @if (flow.GridPercent > 0)
+            {
+                <div class="flow-segment grid" style="width: @(flow.GridPercent)%"></div>
+            }
+            @if (flow.SolarPercent > 0)
+            {
+                <div class="flow-segment solar" style="width: @(flow.SolarPercent)%"></div>
+            }
+            @if (flow.ExportPercent > 0)
+            {
+                <div class="flow-segment export" style="width: @(flow.ExportPercent)%"></div>
+            }
+        </div>
+        <div class="flow-legend">
+            <span><span class="dot grid"></span> Grid: @t.CurrentPowerUsage.ToString("F2") kW</span>
+            <span><span class="dot solar"></span> Solar: @t.CurrentPowerDelivery.ToString("F2") kW</span>
+            @if (t.IsProducing)
+            {
+                <span><span class="dot export"></span> Exporting surplus</span>
+            }
+        </div>
+
         <div class="power-cards">
             <div class="card @(t.IsProducing ? "card-green" : "card-red")">
+                <div class="card-icon">@(t.IsProducing ? "🔋" : "🏠")</div>
                 <div class="card-label">Net Power</div>
                 <div class="card-value">@(t.IsProducing ? "+" : "")@t.NetPower.ToString("F3") kW</div>
                 <div class="card-sub">@(t.IsProducing ? "Producing" : "Consuming")</div>
             </div>
             <div class="card">
+                <div class="card-icon">🔌</div>
                 <div class="card-label">Grid Consumption</div>
                 <div class="card-value">@t.CurrentPowerUsage.ToString("F3") kW</div>
                 <div class="card-sub">Tariff @t.CurrentTariff</div>
             </div>
             <div class="card card-green">
+                <div class="card-icon">☀️</div>
                 <div class="card-label">Solar Production</div>
                 <div class="card-value">@t.CurrentPowerDelivery.ToString("F3") kW</div>
                 <div class="card-sub">Delivered to grid</div>
             </div>
             <div class="card">
+                <div class="card-icon">🔥</div>
                 <div class="card-label">Gas</div>
                 <div class="card-value">@t.GasDelivered.ToString("F3") m³</div>
                 <div class="card-sub">Total</div>
@@ -122,6 +150,23 @@
     }
 
     private void OnStateUpdated(object? sender, P1Telegram telegram) => InvokeAsync(StateHasChanged);
+
+    private record FlowShares(double GridPercent, double SolarPercent, double ExportPercent);
+
+    /// <summary>Turns the current grid/solar power readings into flow-bar percentages (evcc-style power flow visualization).</summary>
+    private static FlowShares GetFlowShares(P1Telegram t)
+    {
+        var grid = (double)t.CurrentPowerUsage;
+        var solar = (double)t.CurrentPowerDelivery;
+        var total = grid + solar;
+        if (total <= 0)
+            return new FlowShares(0, 0, 0);
+
+        var gridPercent = grid / total * 100;
+        var exportPercent = t.IsProducing ? Math.Min(solar / total * 100, 100) * 0.25 : 0;
+        var solarPercent = solar / total * 100 - exportPercent;
+        return new FlowShares(gridPercent, Math.Max(solarPercent, 0), exportPercent);
+    }
 
     private async Task TriggerTestNotificationAsync()
     {

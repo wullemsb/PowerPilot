@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using OpenTelemetry.Trace;
 using PowerPilot.Agents;
@@ -17,6 +18,14 @@ builder.AddServiceDefaults();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddSignalR();
+
+// Persist Data Protection keys next to the app instead of relying on the
+// user profile (%LOCALAPPDATA%\ASP.NET\DataProtection-Keys). When that
+// profile folder isn't writable, key-ring creation throws, the Blazor
+// Server circuit's SignalR negotiate call fails, and the whole page freezes.
+builder.Services.AddDataProtection()
+    .SetApplicationName("PowerPilot")
+    .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, "dataprotection-keys")));
 
 builder.Services.Configure<P1ReaderOptions>(builder.Configuration.GetSection("P1Reader"));
 builder.Services.Configure<HomeWizardOptions>(builder.Configuration.GetSection("HomeWizard"));

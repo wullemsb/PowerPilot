@@ -1,0 +1,30 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build solution",
+            "type": "shell",
+            "command": "dotnet build PowerPilot.slnx",
+            "inAgents": true,
+            "runOptions": { "runOn": "worktreeCreated" }
+        },
+        {
+            "label": "Run (Aspire AppHost)",
+            "type": "shell",
+            "command": "dotnet run --project src/PowerPilot.AppHost/PowerPilot.AppHost.csproj",
+            "inAgents": true
+        },
+        {
+            "label": "Run Web app directly",
+            "type": "shell",
+            "command": "dotnet run --project src/PowerPilot.Web/PowerPilot.Web.csproj",
+            "inAgents": true
+        },
+        {
+            "label": "Run tests",
+            "type": "shell",
+            "command": "dotnet test tests/PowerPilot.Tests/PowerPilot.Tests.csproj",
+            "inAgents": true
+        }
+    ]
+}
