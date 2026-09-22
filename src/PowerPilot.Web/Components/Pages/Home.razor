@@ -1,5 +1,6 @@
 @page "/"
 @rendermode InteractiveServer
+@using PowerPilot.Web.Components.Shared
 @using PowerPilot.Core.Interfaces
 @using PowerPilot.Core.Models
 @inject IEnergyStateService EnergyState
@@ -16,6 +17,8 @@
             @(EnergyState.CurrentTelegram != null ? "● LIVE" : "○ No data")
         </div>
     </div>
+
+    <EnergyTrendChart />
 
     @if (EnergyState.CurrentTelegram != null)
     {

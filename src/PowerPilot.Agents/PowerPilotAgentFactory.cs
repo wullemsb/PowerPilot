@@ -38,7 +38,7 @@ public static class PowerPilotAgentFactory
 
         clientOptions.Telemetry = new TelemetryConfig
         {
-            OtlpEndpoint = "https://managed-powerpilot-dce-s0e5.westeurope-1.ingest.monitor.azure.com/dataCollectionRules/dcr-18ed90fada4547eca19c83b0720c3650/streams/Microsoft-OTLP-Traces/otlp/v1/traces",//Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT"),
+            OtlpEndpoint = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT"),
             CaptureContent = true,
             ExporterType = "oltp-http",
         };

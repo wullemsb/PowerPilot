@@ -1,0 +1,118 @@
+@using Microsoft.Extensions.Options
+@using Microsoft.JSInterop
+@using PowerPilot.Core.Interfaces
+@using PowerPilot.Core.Models
+@using PowerPilot.Web.Models
+@implements IAsyncDisposable
+@inject IEnergyRepository EnergyRepository
+@inject IOptions<DashboardOptions> DashboardOptions
+@inject IJSRuntime JS
+
+<section class="energy-trend" aria-labelledby="energy-trend-title">
+    <div class="energy-trend-header">
+        <div>
+            <h2 id="energy-trend-title">Today's power flow</h2>
+            <p>Hourly averages in kW</p>
+        </div>
+        <span class="energy-trend-status @(isStale ? "stale" : "")">
+            @(isStale ? "Stale data" : $"Updated {lastUpdatedLocal?.ToString("HH:mm") ?? "--:--"}")
+        </span>
+    </div>
+
+    @if (isLoading && points.Count == 0)
+    {
+        <div class="energy-trend-message">Loading today's power flow...</div>
+    }
+    else if (points.Count == 0)
+    {
+        <div class="energy-trend-message">No readings are available for today.</div>
+    }
+    else
+    {
+        <div class="energy-trend-canvas-wrap">
+            <canvas @ref="chartCanvas" aria-label="Today's hourly consumption and solar production chart"></canvas>
+        </div>
+    }
+</section>
+
+@code {
+    private ElementReference chartCanvas;
+    private IJSObjectReference? chartModule;
+    private System.Threading.Timer? refreshTimer;
+    private readonly List<EnergyChartPoint> points = [];
+    private bool isLoading = true;
+    private bool isStale;
+    private DateTime? lastUpdatedLocal;
+    private TimeZoneInfo homeTimeZone = TimeZoneInfo.Utc;
+
+    protected override async Task OnInitializedAsync()
+    {
+        homeTimeZone = FindTimeZone(DashboardOptions.Value.TimeZoneId);
+        await RefreshAsync();
+        refreshTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                await RefreshAsync();
+                StateHasChanged();
+            });
+        }, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (points.Count == 0)
+            return;
+
+        chartModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/energy-trend-chart.js");
+        await chartModule.InvokeVoidAsync("render", chartCanvas, points, isStale);
+    }
+
+    private async Task RefreshAsync()
+    {
+        isLoading = points.Count == 0;
+        try
+        {
+            var localNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, homeTimeZone);
+            var localStart = DateTime.SpecifyKind(localNow.Date, DateTimeKind.Unspecified);
+            var fromUtc = TimeZoneInfo.ConvertTimeToUtc(localStart, homeTimeZone);
+            var readings = await EnergyRepository.GetHourlyAveragesAsync(fromUtc, DateTime.UtcNow);
+
+            points.Clear();
+            points.AddRange(readings.Select(reading => new EnergyChartPoint(
+                TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(reading.Timestamp, DateTimeKind.Utc), homeTimeZone).ToString("HH:mm"),
+                (double)reading.CurrentPowerUsage,
+                -(double)reading.CurrentPowerDelivery)));
+            isStale = false;
+            lastUpdatedLocal = localNow;
+        }
+        catch
+        {
+            isStale = points.Count > 0;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private static TimeZoneInfo FindTimeZone(string timeZoneId)
+    {
+        try { return TimeZoneInfo.FindSystemTimeZoneById(timeZoneId); }
+        catch (TimeZoneNotFoundException) { return TimeZoneInfo.Utc; }
+        catch (InvalidTimeZoneException) { return TimeZoneInfo.Utc; }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        refreshTimer?.Dispose();
+        if (chartModule is not null)
+        {
+            try { await chartModule.InvokeVoidAsync("dispose", chartCanvas); }
+            catch (JSDisconnectedException) { }
+            await chartModule.DisposeAsync();
+        }
+    }
+
+    private sealed record EnergyChartPoint(string Timestamp, double Consumption, double Production);
+}

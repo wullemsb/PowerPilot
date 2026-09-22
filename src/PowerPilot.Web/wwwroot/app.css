@@ -119,6 +119,27 @@ h1:focus {
 .flow-legend .dot.solar { background: var(--pp-solar); }
 .flow-legend .dot.export { background: var(--pp-export); }
 
+.energy-trend { background: var(--pp-surface); border-radius: var(--pp-radius-lg); padding: 1.35rem; box-shadow: var(--pp-shadow); border: 1px solid var(--pp-surface-border); margin-bottom: 1.5rem; }
+.energy-trend-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.75rem; }
+.energy-trend-header h2 { margin: 0; font-size: 1.05rem; font-weight: 700; }
+.energy-trend-header p { margin: 0.25rem 0 0; color: var(--pp-text-muted); font-size: 0.8rem; }
+.energy-trend-status { color: var(--pp-darkest-green); font-size: 0.75rem; font-weight: 700; white-space: nowrap; }
+.energy-trend-status.stale { color: var(--pp-orange); }
+.energy-trend-canvas-wrap { position: relative; height: 280px; }
+.energy-trend-message { display: grid; place-items: center; min-height: 280px; color: var(--pp-text-muted); text-align: center; }
+@media (max-width: 600px) { .energy-trend { padding: 1rem; } .energy-trend-canvas-wrap { height: 240px; } .energy-trend-header { align-items: baseline; } }
+
+.charts-subtitle { margin: 0.35rem 0 0; color: var(--pp-text-muted); font-size: 0.9rem; }
+.chart-range { display: inline-flex; gap: 0.25rem; padding: 0.25rem; background: var(--pp-surface); border: 1px solid var(--pp-surface-border); border-radius: var(--pp-radius-pill); box-shadow: var(--pp-shadow); margin-bottom: 1.5rem; }
+.chart-range-option { border: 0; border-radius: var(--pp-radius-pill); padding: 0.55rem 1rem; background: transparent; color: var(--pp-text-muted); cursor: pointer; font: inherit; font-size: 0.8rem; font-weight: 700; }
+.chart-range-option:hover, .chart-range-option.selected { background: var(--pp-gray-dark); color: white; }
+.chart-panel { background: var(--pp-surface); border-radius: var(--pp-radius-lg); padding: 1.35rem; box-shadow: var(--pp-shadow); border: 1px solid var(--pp-surface-border); margin-bottom: 1.5rem; }
+.chart-panel-header h2 { margin: 0; font-size: 1.05rem; font-weight: 700; }
+.chart-panel-header p { margin: 0.25rem 0 0.75rem; color: var(--pp-text-muted); font-size: 0.8rem; }
+.chart-panel-canvas { position: relative; height: 300px; }
+.charts-empty { background: var(--pp-surface); border-radius: var(--pp-radius-lg); box-shadow: var(--pp-shadow); border: 1px solid var(--pp-surface-border); }
+@media (max-width: 600px) { .charts-page .dashboard-header { align-items: flex-start; flex-direction: column; } .chart-range { width: 100%; } .chart-range-option { flex: 1; padding-inline: 0.5rem; } .chart-panel { padding: 1rem; } .chart-panel-canvas { height: 250px; } }
+
 .power-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
 .card { position: relative; background: var(--pp-surface); border-radius: var(--pp-radius-lg); padding: 1.35rem; box-shadow: var(--pp-shadow); border: 1px solid var(--pp-surface-border); transition: box-shadow 0.2s ease, transform 0.2s ease; }
 .card:hover { box-shadow: var(--pp-shadow-hover); transform: translateY(-2px); }

@@ -1,0 +1,175 @@
+@page "/charts"
+@rendermode InteractiveServer
+@using Microsoft.Extensions.Options
+@using Microsoft.JSInterop
+@using PowerPilot.Core.Interfaces
+@using PowerPilot.Web.Models
+@inject IEnergyRepository EnergyRepository
+@inject IOptions<DashboardOptions> DashboardOptions
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>Energy Charts | PowerPilot</PageTitle>
+
+<div class="dashboard charts-page">
+    <div class="dashboard-header">
+        <div>
+            <h1>Energy charts</h1>
+            <p class="charts-subtitle">Compare demand, generation, and grid dependence over time.</p>
+        </div>
+        <span class="energy-trend-status @(isStale ? "stale" : "")">
+            @(isStale ? "Stale data" : $"Updated {lastUpdatedLocal?.ToString("HH:mm") ?? "--:--"}")
+        </span>
+    </div>
+
+    <div class="chart-range" role="group" aria-label="Chart time range">
+        @foreach (var option in Enum.GetValues<ChartRange>())
+        {
+            <button class="chart-range-option @(selectedRange == option ? "selected" : "")"
+                    @onclick="() => SelectRangeAsync(option)">
+                @GetRangeLabel(option)
+            </button>
+        }
+    </div>
+
+    @if (isLoading && points.Count == 0)
+    {
+        <div class="energy-trend-message charts-empty">Loading energy charts...</div>
+    }
+    else if (points.Count == 0)
+    {
+        <div class="energy-trend-message charts-empty">No readings are available for this period.</div>
+    }
+    else
+    {
+        <section class="chart-panel" aria-labelledby="net-flow-title">
+            <div class="chart-panel-header">
+                <div>
+                    <h2 id="net-flow-title">Net grid flow</h2>
+                    <p>Positive values import from the grid; negative values export to it.</p>
+                </div>
+            </div>
+            <div class="chart-panel-canvas"><canvas @ref="netCanvas" aria-label="Net grid import and export chart"></canvas></div>
+        </section>
+
+        <section class="chart-panel" aria-labelledby="hourly-comparison-title">
+            <div class="chart-panel-header">
+                <div>
+                    <h2 id="hourly-comparison-title">Consumption and solar production</h2>
+                    <p>Hourly average power, shown as positive values for direct comparison.</p>
+                </div>
+            </div>
+            <div class="chart-panel-canvas"><canvas @ref="comparisonCanvas" data-chart-type="bar" aria-label="Hourly consumption and solar production bar chart"></canvas></div>
+        </section>
+    }
+</div>
+
+@code {
+    private ElementReference netCanvas;
+    private ElementReference comparisonCanvas;
+    private IJSObjectReference? chartModule;
+    private System.Threading.Timer? refreshTimer;
+    private readonly List<EnergyChartPoint> points = [];
+    private ChartRange selectedRange = ChartRange.Today;
+    private bool isLoading = true;
+    private bool isStale;
+    private DateTime? lastUpdatedLocal;
+    private TimeZoneInfo homeTimeZone = TimeZoneInfo.Utc;
+
+    protected override async Task OnInitializedAsync()
+    {
+        homeTimeZone = FindTimeZone(DashboardOptions.Value.TimeZoneId);
+        await RefreshAsync();
+        refreshTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                await RefreshAsync();
+                StateHasChanged();
+            });
+        }, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (points.Count == 0)
+            return;
+
+        chartModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/energy-trend-chart.js");
+        await chartModule.InvokeVoidAsync("renderNet", netCanvas, points);
+        await chartModule.InvokeVoidAsync("renderComparison", comparisonCanvas, points);
+    }
+
+    private async Task SelectRangeAsync(ChartRange range)
+    {
+        if (selectedRange == range)
+            return;
+
+        selectedRange = range;
+        await RefreshAsync();
+        StateHasChanged();
+    }
+
+    private async Task RefreshAsync()
+    {
+        isLoading = points.Count == 0;
+        try
+        {
+            var localNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, homeTimeZone);
+            var localStart = DateTime.SpecifyKind(localNow.Date.AddDays(-(int)selectedRange + 1), DateTimeKind.Unspecified);
+            var fromUtc = TimeZoneInfo.ConvertTimeToUtc(localStart, homeTimeZone);
+            var readings = await EnergyRepository.GetHourlyAveragesAsync(fromUtc, DateTime.UtcNow);
+
+            points.Clear();
+            points.AddRange(readings.Select(reading => new EnergyChartPoint(
+                TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(reading.Timestamp, DateTimeKind.Utc), homeTimeZone).ToString("MM-dd HH:mm"),
+                (double)reading.CurrentPowerUsage,
+                (double)reading.CurrentPowerDelivery)));
+            isStale = false;
+            lastUpdatedLocal = localNow;
+        }
+        catch
+        {
+            isStale = points.Count > 0;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private static string GetRangeLabel(ChartRange range) => range switch
+    {
+        ChartRange.Today => "Today",
+        ChartRange.Week => "7 days",
+        ChartRange.Month => "30 days",
+        _ => range.ToString()
+    };
+
+    private static TimeZoneInfo FindTimeZone(string timeZoneId)
+    {
+        try { return TimeZoneInfo.FindSystemTimeZoneById(timeZoneId); }
+        catch (TimeZoneNotFoundException) { return TimeZoneInfo.Utc; }
+        catch (InvalidTimeZoneException) { return TimeZoneInfo.Utc; }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        refreshTimer?.Dispose();
+        if (chartModule is not null)
+        {
+            try { await chartModule.InvokeVoidAsync("dispose", netCanvas, comparisonCanvas); }
+            catch (JSDisconnectedException) { }
+            await chartModule.DisposeAsync();
+        }
+    }
+
+    private enum ChartRange
+    {
+        Today = 1,
+        Week = 7,
+        Month = 30
+    }
+
+    private sealed record EnergyChartPoint(string Timestamp, double Consumption, double Production);
+}

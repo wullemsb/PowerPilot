@@ -9,6 +9,7 @@ using PowerPilot.Infrastructure.Weather;
 using PowerPilot.P1Reader;
 using PowerPilot.Web.Components;
 using PowerPilot.Web.Hubs;
+using PowerPilot.Web.Models;
 using PowerPilot.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -32,6 +33,7 @@ builder.Services.Configure<HomeWizardOptions>(builder.Configuration.GetSection("
 builder.Services.Configure<WeatherOptions>(builder.Configuration.GetSection("Weather"));
 builder.Services.Configure<AgentOptions>(builder.Configuration.GetSection("Agent"));
 builder.Services.Configure<EnergyMonitoringOptions>(builder.Configuration.GetSection("EnergyMonitoring"));
+builder.Services.Configure<DashboardOptions>(builder.Configuration.GetSection("Dashboard"));
 
 var dbPath = Path.Combine(builder.Environment.ContentRootPath, "powerpilot.db");
 builder.Services.AddDbContext<EnergyDbContext>(options =>
