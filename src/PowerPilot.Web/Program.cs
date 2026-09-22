@@ -86,7 +86,7 @@ app.MapDefaultEndpoints();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<EnergyDbContext>();
-    db.Database.EnsureCreated();
+    await EnergyDatabaseInitializer.InitializeAsync(db);
 }
 
 if (!app.Environment.IsDevelopment())
