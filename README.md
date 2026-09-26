@@ -18,6 +18,8 @@ An intelligent home energy management assistant built with .NET 8, Blazor, and G
 - 📈 **Historical Analytics**: Track consumption patterns over time (hourly, daily, weekly, monthly)
 - ⚡ **Live Power Dashboard**: Real-time visualization of consumption and production
 
+![PowerPilot Architecture](/docs/powerpilot-agent-architecture.svg)
+
 ## Architecture
 
 PowerPilot is built using a modular architecture with the following projects:
@@ -32,6 +34,8 @@ src/
 ├── PowerPilot.Infrastructure    # Data persistence and external services
 └── PowerPilot.P1Reader          # P1 smart meter communication
 ```
+
+An overview of the PowerPilot architecture is shown below:
 
 ```mermaid
 flowchart LR
